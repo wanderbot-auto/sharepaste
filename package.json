@@ -1,0 +1,15 @@
+{
+  "name": "sharepaste",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "server",
+    "client",
+    "desktop"
+  ],
+  "scripts": {
+    "build": "npm run -w server build && npm run -w client build && npm run -w desktop build",
+    "test": "npm run -w server test && npm run -w client test && npm run -w desktop test",
+    "lint": "npm run -w server lint && npm run -w client lint && npm run -w desktop lint"
+  }
+}
