@@ -32,6 +32,20 @@ This repository ships two runnable packages:
   - `core/crypto-agent.ts`
   - `core/sharepaste-client.ts`
 
+## Development preparation docs
+
+- `docs/pre-dev/PRD-v0.1-internal-pilot.md`
+- `docs/pre-dev/TECH-DESIGN-v0.1.md`
+- `docs/pre-dev/SECOPS-BASELINE-v0.1.md`
+- `docs/pre-dev/TEST-RELEASE-PLAN-v0.1.md`
+- `docs/pre-dev/EXECUTION-WBS-v0.1.md`
+
+## Operations docs
+
+- `docs/ops/monitoring-baseline.md`
+- `docs/ops/incident-runbook.md`
+- `docs/ops/release-checklist.md`
+
 ## Quick start
 
 ```bash
@@ -42,13 +56,22 @@ npm run -w client dev -- init --name my-laptop
 npm run -w client dev -- run
 ```
 
+Durable backend mode (Postgres + Redis):
+
+```bash
+docker compose up -d postgres redis
+SHAREPASTE_STORAGE_MODE=durable npm run -w server dev
+```
+
 Useful CLI commands:
 
 ```bash
 npm run -w client dev -- devices
+npm run -w client dev -- remove-device --target-device-id dev_xxx
 npm run -w client dev -- bind-code
 npm run -w client dev -- bind-request --code 123456
 npm run -w client dev -- bind-confirm --request-id req_xxx --approve
+npm run -w client dev -- recover --phrase <recovery_phrase> --name my-new-device
 npm run -w client dev -- policy --allow-text true --allow-image true --allow-file true --max-file-size 3145728
 npm run -w client dev -- send-text --value "hello from sharepaste"
 npm run -w client dev -- send-file --path ./small.zip
@@ -61,7 +84,18 @@ npm run -w client dev -- send-image --path ./image.png
 npm test
 ```
 
+Run storage integration tests (requires local Postgres + Redis):
+
+```bash
+docker compose up -d postgres redis
+SHAREPASTE_INTEGRATION=1 SHAREPASTE_STORAGE_MODE=durable npm run -w server test
+```
+
 Current tests cover binding, policy conflicts, offline TTL handling, dedup/loop suppression, ring-buffer history, and cryptographic envelope round trips.
+
+## Release
+
+Pushing a tag like `v0.1.0` triggers `.github/workflows/release-client.yml`, which builds the desktop client on macOS/Windows/Linux and uploads artifacts to GitHub Release.
 
 ## Tauri desktop shell
 

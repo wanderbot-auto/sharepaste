@@ -67,6 +67,35 @@ program.command("devices").action(async () => {
   });
 });
 
+program
+  .command("remove-device")
+  .requiredOption("--target-device-id <deviceId>", "device id to remove from group")
+  .action(async (opts: { targetDeviceId: string }) => {
+    const client = getClient();
+    await bootstrap(client);
+    const removed = await client.removeDevice(opts.targetDeviceId);
+    emit({ removed }, () => {
+      console.log(removed ? "removed" : "not_removed");
+    });
+  });
+
+program
+  .command("recover")
+  .requiredOption("--phrase <phrase>", "recovery phrase")
+  .option("--name <name>", "new device name")
+  .action(async (opts: { phrase: string; name?: string }) => {
+    const client = getClient();
+    const recoverName = opts.name ?? options().name;
+    if (!recoverName) {
+      throw new Error("device name is required via --name");
+    }
+    const state = await client.recoverGroup(opts.phrase, recoverName);
+    emit(state, () => {
+      console.log(`recovered device ${state.deviceId}`);
+      console.log(`group: ${state.groupId}`);
+    });
+  });
+
 program.command("bind-code").action(async () => {
   const client = getClient();
   await bootstrap(client);

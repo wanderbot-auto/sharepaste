@@ -1,6 +1,7 @@
 import os from "node:os";
 import { Buffer } from "node:buffer";
 import { promises as fs } from "node:fs";
+import type { ClientDuplexStream } from "@grpc/grpc-js";
 import { ClipboardWatcher } from "../adapters/clipboard-watcher.js";
 import type { ClipboardPayload } from "../types.js";
 import { CryptoAgent } from "./crypto-agent.js";
@@ -29,6 +30,12 @@ export class SharePasteClient {
   private state: PersistedState | null = null;
 
   private syncEngine: SyncEngine | null = null;
+
+  private realtimeLoop: Promise<void> | null = null;
+
+  private realtimeStopRequested = false;
+
+  private realtimeStream: ClientDuplexStream<any, any> | null = null;
 
   constructor(options: SharePasteClientOptions) {
     this.grpc = new SharePasteGrpcClient(options.grpcAddress);
@@ -96,6 +103,38 @@ export class SharePasteClient {
     return this.grpc.listDevices(state.deviceId);
   }
 
+  async removeDevice(targetDeviceId: string): Promise<boolean> {
+    const state = this.requireState();
+    return this.grpc.removeDevice(state.deviceId, targetDeviceId);
+  }
+
+  async recoverGroup(recoveryPhrase: string, deviceName: string): Promise<PersistedState> {
+    const identity = this.crypto.createIdentity();
+    const registration = await this.grpc.recoverGroup({
+      recoveryPhrase,
+      deviceName,
+      platform: os.platform(),
+      pubkey: identity.wrapPublicKey
+    });
+
+    const groupKey = this.extractGroupKey(registration.sealedGroupKey);
+    const state: PersistedState = {
+      deviceId: registration.device.deviceId,
+      groupId: registration.groupId,
+      deviceName,
+      platform: os.platform(),
+      recoveryPhrase,
+      sealedGroupKey: registration.sealedGroupKey,
+      identity,
+      groupKeyBase64: Buffer.from(groupKey).toString("base64url")
+    };
+
+    await this.stateStore.save(state);
+    this.state = state;
+    this.syncEngine = new SyncEngine(state.deviceId);
+    return state;
+  }
+
   async getPolicy(): Promise<{ allowText: boolean; allowImage: boolean; allowFile: boolean; maxFileSizeBytes: number; version: number }> {
     const state = this.requireState();
     return this.grpc.getPolicy(state.deviceId);
@@ -121,24 +160,13 @@ export class SharePasteClient {
   }
 
   async startRealtime(): Promise<void> {
+    if (this.realtimeLoop) {
+      return;
+    }
+
     const state = this.requireState();
     const policy = await this.grpc.getPolicy(state.deviceId).catch(() => defaultPolicy());
     const groupKey = this.getGroupKey();
-
-    const stream = this.grpc.openEventStream(state.deviceId, undefined);
-    stream.on("data", async (message: any) => {
-      if (message.clipboard?.item) {
-        const item = this.fromServerClipboard(message.clipboard.item);
-        await this.applyIncoming(item, groupKey);
-        await this.grpc.ackItem(state.deviceId, item.itemId);
-      }
-
-      if (message.pairingRequest) {
-        console.log(
-          `pair request from ${message.pairingRequest.requesterName} (${message.pairingRequest.requesterPlatform}), request_id=${message.pairingRequest.requestId}`
-        );
-      }
-    });
 
     await this.syncOffline();
 
@@ -147,9 +175,21 @@ export class SharePasteClient {
         await this.sendText(change.value, policy);
       }
     });
+
+    this.realtimeStopRequested = false;
+    this.realtimeLoop = this.runRealtimeLoop(state.deviceId, groupKey);
   }
 
   async stopRealtime(): Promise<void> {
+    this.realtimeStopRequested = true;
+    if (this.realtimeStream) {
+      this.realtimeStream.cancel();
+      this.realtimeStream = null;
+    }
+    if (this.realtimeLoop) {
+      await this.realtimeLoop.catch(() => undefined);
+      this.realtimeLoop = null;
+    }
     this.clipboard.stop();
   }
 
@@ -253,5 +293,61 @@ export class SharePasteClient {
       ciphertext: item.ciphertext,
       nonce: item.nonce
     };
+  }
+
+  private async runRealtimeLoop(deviceId: string, groupKey: Uint8Array): Promise<void> {
+    while (!this.realtimeStopRequested) {
+      await this.connectOnce(deviceId, groupKey);
+      if (!this.realtimeStopRequested) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 2000);
+        });
+      }
+    }
+  }
+
+  private async connectOnce(deviceId: string, groupKey: Uint8Array): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const stream = this.grpc.openEventStream(deviceId, undefined);
+      this.realtimeStream = stream;
+      let resolved = false;
+
+      const cleanup = () => {
+        if (resolved) {
+          return;
+        }
+        resolved = true;
+        if (this.realtimeStream === stream) {
+          this.realtimeStream = null;
+        }
+        resolve();
+      };
+
+      stream.on("data", async (message: any) => {
+        if (message.clipboard?.item) {
+          const item = this.fromServerClipboard(message.clipboard.item);
+          await this.applyIncoming(item, groupKey);
+          await this.grpc.ackItem(deviceId, item.itemId);
+        }
+
+        if (message.pairingRequest) {
+          console.log(
+            `pair request from ${message.pairingRequest.requesterName} (${message.pairingRequest.requesterPlatform}), request_id=${message.pairingRequest.requestId}`
+          );
+        }
+      });
+
+      stream.on("error", () => {
+        cleanup();
+      });
+
+      stream.on("end", () => {
+        cleanup();
+      });
+
+      stream.on("close", () => {
+        cleanup();
+      });
+    });
   }
 }

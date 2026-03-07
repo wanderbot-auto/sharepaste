@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "node ../node_modules/@tauri-apps/cli/index.js dev",
     "build": "npm run frontend:build",
-    "frontend:dev": "vite",
-    "frontend:build": "tsc -p tsconfig.json --noEmit && vite build",
-    "lint": "tsc -p tsconfig.json --noEmit",
+    "frontend:dev": "node ../node_modules/vite/bin/vite.js",
+    "frontend:build": "node ../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit && node ../node_modules/vite/bin/vite.js build",
+    "lint": "node ../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "test": "node -e \"console.log('desktop: no unit tests yet')\""
   },
   "dependencies": {

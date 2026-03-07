@@ -61,6 +61,18 @@ export interface RegisterDeviceResult {
   sealedGroupKey: string;
 }
 
+export interface RecoverGroupResult {
+  device: {
+    deviceId: string;
+    groupId: string;
+    pubkey: string;
+    name: string;
+    platform: string;
+  };
+  groupId: string;
+  sealedGroupKey: string;
+}
+
 export class SharePasteGrpcClient {
   private readonly deviceClient: any;
 
@@ -104,6 +116,30 @@ export class SharePasteGrpcClient {
           return;
         }
         resolve(response.devices ?? []);
+      });
+    });
+  }
+
+  removeDevice(requestDeviceId: string, targetDeviceId: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      this.deviceClient.RemoveDevice({ requestDeviceId, targetDeviceId }, (err: Error | null, response: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(Boolean(response.removed));
+      });
+    });
+  }
+
+  recoverGroup(input: { recoveryPhrase: string; deviceName: string; platform: string; pubkey: string }): Promise<RecoverGroupResult> {
+    return new Promise((resolve, reject) => {
+      this.deviceClient.RecoverGroup(input, (err: Error | null, response: RecoverGroupResult) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(response);
       });
     });
   }

@@ -1,4 +1,4 @@
-import type { BindCode, BindRequest, ClipboardItem, Device, GroupState, OfflineEnvelope, Policy } from "../types.js";
+import type { BindCode, BindRequest, ClipboardItem, Device, GroupState, OfflineEnvelope, Policy, SharePasteSnapshot } from "../types.js";
 import { DEFAULT_POLICY, isItemAllowedByPolicy } from "../utils/policy.js";
 import {
   generateBindCode,
@@ -59,6 +59,78 @@ export class SharePasteStore {
   private readonly presences = new Map<string, PresenceState>();
 
   private readonly seenItems = new Map<string, Set<string>>();
+
+  constructor(snapshot?: SharePasteSnapshot | null) {
+    if (!snapshot) {
+      return;
+    }
+
+    for (const device of snapshot.devices) {
+      this.devices.set(device.deviceId, device);
+    }
+
+    for (const group of snapshot.groups) {
+      this.groups.set(group.groupId, group);
+    }
+
+    for (const entry of snapshot.groupDevices) {
+      this.groupDevices.set(entry.groupId, new Set(entry.deviceIds));
+    }
+
+    for (const code of snapshot.bindCodes) {
+      this.bindCodes.set(code.code, code);
+    }
+
+    for (const request of snapshot.bindRequests) {
+      this.bindRequests.set(request.requestId, request);
+    }
+
+    for (const queue of snapshot.offline) {
+      this.offline.set(queue.deviceId, queue.queue);
+    }
+
+    for (const seen of snapshot.seenItems) {
+      this.seenItems.set(seen.groupId, new Set(seen.itemIds));
+    }
+  }
+
+  static fromSnapshot(snapshot: SharePasteSnapshot | null): SharePasteStore {
+    return new SharePasteStore(snapshot);
+  }
+
+  exportSnapshot(): SharePasteSnapshot {
+    this.cleanupExpired();
+
+    return {
+      devices: [...this.devices.values()].map((device) => ({ ...device })),
+      groups: [...this.groups.values()].map((group) => ({
+        ...group,
+        policy: { ...group.policy }
+      })),
+      groupDevices: [...this.groupDevices.entries()].map(([groupId, deviceIds]) => ({
+        groupId,
+        deviceIds: [...deviceIds.values()]
+      })),
+      bindCodes: [...this.bindCodes.values()].map((code) => ({ ...code })),
+      bindRequests: [...this.bindRequests.values()].map((request) => ({ ...request })),
+      offline: [...this.offline.entries()].map(([deviceId, queue]) => ({
+        deviceId,
+        queue: queue.map((entry) => ({
+          targetDeviceId: entry.targetDeviceId,
+          expiresAtUnix: entry.expiresAtUnix,
+          item: {
+            ...entry.item,
+            ciphertext: new Uint8Array(entry.item.ciphertext),
+            nonce: new Uint8Array(entry.item.nonce)
+          }
+        }))
+      })),
+      seenItems: [...this.seenItems.entries()].map(([groupId, itemIds]) => ({
+        groupId,
+        itemIds: [...itemIds.values()]
+      }))
+    };
+  }
 
   registerDevice(input: RegisterDeviceInput): RegisterDeviceResult {
     this.cleanupExpired();

@@ -161,6 +161,15 @@ async fn list_devices(options: CliOptions) -> Result<Value, String> {
 }
 
 #[tauri::command]
+async fn remove_device(options: CliOptions, target_device_id: String) -> Result<Value, String> {
+    run_client_json(
+        &options,
+        "remove-device",
+        &["--target-device-id".to_string(), target_device_id],
+    )
+}
+
+#[tauri::command]
 async fn create_bind_code(options: CliOptions) -> Result<Value, String> {
     run_client_json(&options, "bind-code", &[])
 }
@@ -217,6 +226,25 @@ async fn send_file(options: CliOptions, path: String, mime: String, as_image: bo
 }
 
 #[tauri::command]
+async fn recover_group(options: CliOptions, phrase: String) -> Result<Value, String> {
+    let device_name = options
+        .device_name
+        .clone()
+        .ok_or_else(|| "deviceName is required for recovery".to_string())?;
+
+    run_client_json(
+        &options,
+        "recover",
+        &[
+            "--phrase".to_string(),
+            phrase,
+            "--name".to_string(),
+            device_name,
+        ],
+    )
+}
+
+#[tauri::command]
 async fn start_sync(options: CliOptions, sync: tauri::State<'_, SyncProcess>) -> Result<Value, String> {
     let mut lock = sync.child.lock().map_err(|_| "failed to lock sync state".to_string())?;
     if let Value::Object(status) = refresh_status(&mut lock)? {
@@ -265,6 +293,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             init_device,
             list_devices,
+            remove_device,
             create_bind_code,
             request_bind,
             confirm_bind,
@@ -272,6 +301,7 @@ fn main() {
             update_policy,
             send_text,
             send_file,
+            recover_group,
             start_sync,
             stop_sync,
             sync_status

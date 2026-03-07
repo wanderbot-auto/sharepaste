@@ -63,3 +63,25 @@ export interface OfflineEnvelope {
   targetDeviceId: string;
   expiresAtUnix: number;
 }
+
+export interface SharePasteSnapshot {
+  devices: Device[];
+  groups: GroupState[];
+  groupDevices: Array<{ groupId: string; deviceIds: string[] }>;
+  bindCodes: BindCode[];
+  bindRequests: BindRequest[];
+  offline: Array<{ deviceId: string; queue: OfflineEnvelope[] }>;
+  seenItems: Array<{ groupId: string; itemIds: string[] }>;
+}
+
+export interface AuditRecord {
+  action: string;
+  actorDeviceId?: string;
+  groupId?: string;
+  requestId?: string;
+  itemId?: string;
+  result: "success" | "failure";
+  errorCode?: string;
+  metadata?: Record<string, string | number | boolean | null>;
+  createdAtUnix: number;
+}

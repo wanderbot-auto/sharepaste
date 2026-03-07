@@ -61,6 +61,8 @@ export function App() {
 
   const [bindInputCode, setBindInputCode] = useState("");
   const [requestId, setRequestId] = useState("");
+  const [removeTargetId, setRemoveTargetId] = useState("");
+  const [recoveryPhrase, setRecoveryPhrase] = useState("");
   const [textToSend, setTextToSend] = useState("");
   const [filePath, setFilePath] = useState("");
   const [fileMime, setFileMime] = useState("application/octet-stream");
@@ -129,6 +131,23 @@ export function App() {
       const response = await invoke<{ devices: DeviceInfo[] }>("list_devices", { options });
       setDevices(response.devices);
       setMessage(`Loaded ${response.devices.length} devices`);
+    });
+  };
+
+  const removeDevice = async () => {
+    if (!removeTargetId.trim()) {
+      setMessage("Enter target device id to remove.");
+      return;
+    }
+
+    await runAction(async () => {
+      const result = await invoke<{ removed: boolean }>("remove_device", {
+        options,
+        targetDeviceId: removeTargetId.trim()
+      });
+      const response = await invoke<{ devices: DeviceInfo[] }>("list_devices", { options });
+      setDevices(response.devices);
+      setMessage(result.removed ? "Device removed from group" : "Device removal failed");
     });
   };
 
@@ -222,6 +241,27 @@ export function App() {
     });
   };
 
+  const recoverGroup = async () => {
+    if (!recoveryPhrase.trim()) {
+      setMessage("Recovery phrase cannot be empty.");
+      return;
+    }
+
+    if (!deviceName.trim()) {
+      setMessage("Device name is required for recovery.");
+      return;
+    }
+
+    await runAction(async () => {
+      const state = await invoke<DeviceState>("recover_group", {
+        options,
+        phrase: recoveryPhrase.trim()
+      });
+      setDeviceState(state);
+      setMessage(`Recovered into group ${state.groupId}`);
+    });
+  };
+
   const startSync = async () => {
     await runAction(async () => {
       const status = await invoke<SyncStatus>("start_sync", { options });
@@ -271,9 +311,16 @@ export function App() {
                 placeholder="C:\\Users\\you\\.sharepaste\\state.json"
               />
             </label>
+            <label>
+              Recovery phrase (optional)
+              <input value={recoveryPhrase} onChange={(event) => setRecoveryPhrase(event.target.value)} />
+            </label>
             <div className="actions">
               <button type="submit" disabled={busy}>
                 Initialize
+              </button>
+              <button type="button" onClick={recoverGroup} disabled={busy}>
+                Recover Group
               </button>
               <button type="button" onClick={startSync} disabled={busy || syncStatus.running}>
                 Start Sync
@@ -372,6 +419,13 @@ export function App() {
               </label>
               <button onClick={savePolicy} disabled={busy}>
                 Save Policy (v{policy.version})
+              </button>
+              <label>
+                Remove device by ID
+                <input value={removeTargetId} onChange={(event) => setRemoveTargetId(event.target.value)} />
+              </label>
+              <button className="muted" onClick={removeDevice} disabled={busy}>
+                Remove Device
               </button>
             </div>
           )}

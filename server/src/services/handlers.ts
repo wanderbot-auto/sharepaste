@@ -1,11 +1,6 @@
-import type {
-  sendUnaryData,
-  ServerDuplexStream,
-  ServerUnaryCall,
-  ServiceError
-} from "@grpc/grpc-js";
-import { SharePasteStore } from "../store/sharepaste-store.js";
+import type { sendUnaryData, ServerDuplexStream, ServerUnaryCall, ServiceError } from "@grpc/grpc-js";
 import type { ClipboardItem, ClipboardKind } from "../types.js";
+import type { SharePasteStoreApi } from "../store/contracts.js";
 
 interface EnvelopeMessage {
   payload?: string;
@@ -35,7 +30,8 @@ const toError = (err: unknown): ServiceError => {
     POLICY_VERSION_CONFLICT: 10,
     INVALID_MAX_FILE_SIZE: 3,
     POLICY_REJECTED: 9,
-    SOURCE_DEVICE_MISMATCH: 3
+    SOURCE_DEVICE_MISMATCH: 3,
+    RATE_LIMITED: 8
   };
 
   const code = map[message] ?? 13;
@@ -95,11 +91,20 @@ const fromClipboardItem = (item: ClipboardItem): Record<string, unknown> => ({
   sourceDeviceId: item.sourceDeviceId
 });
 
-export const createHandlers = (store: SharePasteStore) => {
+const runUnary = async <T>(callback: sendUnaryData<any>, work: () => Promise<T>): Promise<void> => {
+  try {
+    const payload = await work();
+    callback(null, payload);
+  } catch (err) {
+    callback(toError(err), null);
+  }
+};
+
+export const createHandlers = (store: SharePasteStoreApi) => {
   const DeviceService = {
     RegisterDevice: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const result = store.registerDevice({
+      void runUnary(callback, async () => {
+        const result = await store.registerDevice({
           deviceName: call.request.deviceName,
           platform: call.request.platform,
           pubkey: call.request.pubkey,
@@ -107,129 +112,110 @@ export const createHandlers = (store: SharePasteStore) => {
           recoveryPhrase: call.request.recoveryPhrase || undefined
         });
 
-        callback(null, {
+        return {
           device: result.device,
           groupId: result.groupId,
           recoveryPhrase: result.recoveryPhrase,
           createdNewGroup: result.createdNewGroup,
           sealedGroupKey: result.sealedGroupKey
-        });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+        };
+      });
     },
 
     ListDevices: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const devices = store.listDevices(call.request.deviceId);
-        callback(null, { devices });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+      void runUnary(callback, async () => {
+        const devices = await store.listDevices(call.request.deviceId);
+        return { devices };
+      });
     },
 
     RenameDevice: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const device = store.renameDevice(call.request.deviceId, call.request.newName);
-        callback(null, { device });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+      void runUnary(callback, async () => {
+        const device = await store.renameDevice(call.request.deviceId, call.request.newName);
+        return { device };
+      });
     },
 
     RemoveDevice: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const removed = store.removeDevice(call.request.requestDeviceId, call.request.targetDeviceId);
-        callback(null, { removed });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+      void runUnary(callback, async () => {
+        const removed = await store.removeDevice(call.request.requestDeviceId, call.request.targetDeviceId);
+        return { removed };
+      });
     },
 
     RecoverGroup: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const result = store.recoverGroup({
+      void runUnary(callback, async () => {
+        const result = await store.recoverGroup({
           recoveryPhrase: call.request.recoveryPhrase,
           deviceName: call.request.deviceName,
           platform: call.request.platform,
           pubkey: call.request.pubkey
         });
-        callback(null, {
+
+        return {
           device: result.device,
           groupId: result.groupId,
           sealedGroupKey: result.sealedGroupKey
-        });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+        };
+      });
     }
   };
 
   const PairingService = {
     CreateBindCode: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const bindCode = store.createBindCode(call.request.deviceId);
-        callback(null, {
+      void runUnary(callback, async () => {
+        const bindCode = await store.createBindCode(call.request.deviceId);
+        return {
           code: bindCode.code,
           expiresAtUnix: bindCode.expiresAtUnix,
           attemptsLeft: bindCode.attemptsLeft
-        });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+        };
+      });
     },
 
     RequestBind: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const bind = store.requestBind(call.request.code, call.request.requesterDeviceId);
-        const devices = store.listDevices(bind.issuerDeviceId);
+      void runUnary(callback, async () => {
+        const bind = await store.requestBind(call.request.code, call.request.requesterDeviceId);
+        const devices = await store.listDevices(bind.issuerDeviceId);
         const issuer = devices.find((device) => device.deviceId === bind.issuerDeviceId);
-        callback(null, {
+        return {
           requestId: bind.requestId,
           issuerDevice: issuer,
           expiresAtUnix: bind.expiresAtUnix
-        });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+        };
+      });
     },
 
     ConfirmBind: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const confirmation = store.confirmBind(call.request.requestId, call.request.issuerDeviceId, Boolean(call.request.approve));
-        callback(null, {
+      void runUnary(callback, async () => {
+        const confirmation = await store.confirmBind(call.request.requestId, call.request.issuerDeviceId, Boolean(call.request.approve));
+        return {
           approved: Boolean(confirmation.approved),
           groupId: confirmation.groupId ?? "",
           sealedGroupKey: confirmation.sealedGroupKey ?? ""
-        });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+        };
+      });
     }
   };
 
   const PolicyService = {
     GetPolicy: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const policy = store.getPolicy(call.request.deviceId);
-        callback(null, { policy });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+      void runUnary(callback, async () => {
+        const policy = await store.getPolicy(call.request.deviceId);
+        return { policy };
+      });
     },
 
     UpdatePolicy: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const policy = store.updatePolicy(call.request.deviceId, Number(call.request.expectedVersion), {
+      void runUnary(callback, async () => {
+        const policy = await store.updatePolicy(call.request.deviceId, Number(call.request.expectedVersion), {
           allowText: Boolean(call.request.allowText),
           allowImage: Boolean(call.request.allowImage),
           allowFile: Boolean(call.request.allowFile),
           maxFileSizeBytes: Number(call.request.maxFileSizeBytes)
         });
-        callback(null, { policy });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+        return { policy };
+      });
     }
   };
 
@@ -238,10 +224,10 @@ export const createHandlers = (store: SharePasteStore) => {
       let connectedDeviceId: string | undefined;
 
       call.on("data", (message: EnvelopeMessage) => {
-        try {
+        void (async () => {
           if (message.hello) {
             connectedDeviceId = message.hello.deviceId;
-            store.openPresence(message.hello.deviceId, message.hello.lanAddr, (event) => {
+            await store.openPresence(message.hello.deviceId, message.hello.lanAddr, (event) => {
               if (event.type === "connected") {
                 call.write({ connected: event.payload });
                 return;
@@ -263,52 +249,48 @@ export const createHandlers = (store: SharePasteStore) => {
           }
 
           if (message.ack && connectedDeviceId) {
-            store.ackItem(connectedDeviceId, message.ack.itemId);
+            await store.ackItem(connectedDeviceId, message.ack.itemId);
           }
-        } catch (err) {
+        })().catch((err: unknown) => {
           call.emit("error", toError(err));
-        }
+        });
       });
 
       call.on("end", () => {
-        if (connectedDeviceId) {
-          store.closePresence(connectedDeviceId);
-        }
-        call.end();
+        void (async () => {
+          if (connectedDeviceId) {
+            await store.closePresence(connectedDeviceId);
+          }
+          call.end();
+        })();
       });
 
       call.on("error", () => {
         if (connectedDeviceId) {
-          store.closePresence(connectedDeviceId);
+          void store.closePresence(connectedDeviceId);
         }
       });
     },
 
     PushClipboardItem: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const result = store.pushClipboardItem(call.request.deviceId, toClipboardItem(call.request.item));
-        callback(null, { accepted: result.accepted });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+      void runUnary(callback, async () => {
+        const result = await store.pushClipboardItem(call.request.deviceId, toClipboardItem(call.request.item));
+        return { accepted: result.accepted };
+      });
     },
 
     AckItem: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const acknowledged = store.ackItem(call.request.deviceId, call.request.itemId);
-        callback(null, { acknowledged });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+      void runUnary(callback, async () => {
+        const acknowledged = await store.ackItem(call.request.deviceId, call.request.itemId);
+        return { acknowledged };
+      });
     },
 
     FetchOffline: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
-      try {
-        const items = store.fetchOffline(call.request.deviceId, Number(call.request.limit || 100)).map(fromClipboardItem);
-        callback(null, { items });
-      } catch (err) {
-        callback(toError(err), null);
-      }
+      void runUnary(callback, async () => {
+        const items = (await store.fetchOffline(call.request.deviceId, Number(call.request.limit || 100))).map(fromClipboardItem);
+        return { items };
+      });
     }
   };
 
