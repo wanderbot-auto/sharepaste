@@ -56,7 +56,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-bundles-${{ matrix.os }}
-          path: desktop/src-tauri/target/release/bundle/**
+          path: |
+            desktop/src-tauri/target/release/bundle/**/*.AppImage
+            desktop/src-tauri/target/release/bundle/**/*.deb
+            desktop/src-tauri/target/release/bundle/**/*.dmg
+            desktop/src-tauri/target/release/bundle/**/*.exe
+            desktop/src-tauri/target/release/bundle/**/*.msi
+            desktop/src-tauri/target/release/bundle/**/*.rpm
           if-no-files-found: error
 
   publish-release:
@@ -80,4 +86,9 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            release-assets/**
+            release-assets/**/*.AppImage
+            release-assets/**/*.deb
+            release-assets/**/*.dmg
+            release-assets/**/*.exe
+            release-assets/**/*.msi
+            release-assets/**/*.rpm
