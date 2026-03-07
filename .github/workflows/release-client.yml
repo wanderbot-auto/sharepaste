@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-release:
+  build-client:
     strategy:
       fail-fast: false
       matrix:
@@ -49,16 +49,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build desktop client and publish release assets
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build desktop client bundles
+        run: npm run -w desktop tauri -- build
+
+      - name: Upload bundled artifacts
+        uses: actions/upload-artifact@v4
         with:
-          projectPath: desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: SharePaste ${{ github.ref_name }}
-          releaseBody: |
+          name: desktop-bundles-${{ matrix.os }}
+          path: desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error
+
+  publish-release:
+    needs: build-client
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: SharePaste ${{ github.ref_name }}
+          body: |
             Automated release for ${{ github.ref_name }}.
             Artifacts are built from the tagged commit.
-          releaseDraft: false
+          draft: false
           prerelease: false
+          files: |
+            release-assets/**
