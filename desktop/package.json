@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node ../node_modules/@tauri-apps/cli/index.js dev",
-    "tauri": "node ../node_modules/@tauri-apps/cli/index.js",
+    "tauri": "tauri",
     "build": "npm run frontend:build",
     "frontend:dev": "node ../node_modules/vite/bin/vite.js",
     "frontend:build": "node ../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit && node ../node_modules/vite/bin/vite.js build",
