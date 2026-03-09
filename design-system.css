@@ -1,0 +1,81 @@
+:root {
+  /* Color System */
+  --primary-100: #0077C2;
+  --primary-200: #59a5f5;
+  --primary-300: #c8ffff;
+  
+  --accent-100: #00BFFF;
+  --accent-200: #00619a;
+  
+  --text-100: #333333;
+  --text-200: #5c5c5c;
+  
+  --bg-100: #FFFFFF;
+  --bg-200: #f5f5f5;
+  --bg-300: #cccccc;
+
+  /* Spacing System */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Radius System */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  background-color: var(--bg-200);
+  color: var(--text-100);
+  font-family: var(--font-family);
+  margin: 0;
+  padding: 0;
+}
+
+/* Component: Card */
+.card {
+  background-color: var(--bg-100);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Component: Primary Button */
+.btn-primary {
+  background-color: var(--primary-100);
+  color: #ffffff;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-100);
+}
+
+.btn-primary:active {
+  background-color: var(--primary-200);
+  transform: scale(0.98);
+}
+
+/* Component: Input */
+input[type="text"] {
+  border: 1px solid var(--bg-300);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  color: var(--text-100);
+  background-color: var(--bg-100);
+}
+
+/* Typography Helpers */
+.text-primary { color: var(--text-100); }
+.text-secondary { color: var(--text-200); }

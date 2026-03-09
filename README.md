@@ -2,11 +2,11 @@
 
 SharePaste is a cross-platform clipboard sharing system with an anonymous device-group model, 6-digit binding flow, and E2EE payload transport.
 
-This repository ships two runnable packages:
+This repository ships:
 
 - `server/`: gRPC relay/control service (headless)
 - `client/`: cross-platform client core + CLI runtime (Windows/macOS/Linux)
-- `desktop/`: Tauri desktop shell (React UI + Rust command bridge)
+- `macos/`: native macOS status-bar app (SwiftUI)
 
 ## Implemented v1 capabilities
 
@@ -95,24 +95,24 @@ Current tests cover binding, policy conflicts, offline TTL handling, dedup/loop 
 
 ## Release
 
-Pushing a tag like `v0.1.0` triggers `.github/workflows/release-client.yml`, which builds the desktop client on macOS/Windows/Linux and uploads artifacts to GitHub Release.
+Pushing a tag like `v0.1.0` triggers `.github/workflows/release-client.yml`, which builds the native macOS desktop binary and uploads artifacts to GitHub Release.
 
-## Tauri desktop shell
+## Native macOS status-bar app
 
-Prerequisites for desktop packaging/runtime:
+Prerequisites:
 
-- Node.js 20+
-- Rust toolchain (`rustup`)
-- Tauri system dependencies ([Tauri setup guide](https://v2.tauri.app/start/prerequisites/))
+- macOS 13+
+- Xcode 15+ (or Swift toolchain with SwiftUI support)
+- Node.js 20+ (for underlying `client` CLI bridge)
 
 Launch desktop shell in development mode:
 
 ```bash
-npm run -w desktop dev
+npm run desktop:macos:dev
 ```
 
-If you only want to build/check the desktop web UI without Rust packaging:
+Build release binary:
 
 ```bash
-npm run -w desktop build
+npm run desktop:macos:build
 ```

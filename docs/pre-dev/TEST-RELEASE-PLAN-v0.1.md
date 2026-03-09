@@ -7,7 +7,7 @@
 ## 1. Quality Strategy
 - Unit tests: domain logic, policy engine, crypto agent, sync dedup/loop suppression.
 - Integration tests: gRPC handlers + Postgres/Redis adapters.
-- E2E tests: desktop user journeys for register, bind, sync, revoke, recover.
+- E2E tests: macOS desktop user journeys for register, bind, sync, revoke, recover.
 
 ## 2. Test Coverage Requirements
 ### Unit (must pass)
@@ -22,7 +22,7 @@
 - Error mapping consistency to gRPC status codes.
 - Durable restart behavior for devices, policies, and pending requests.
 
-### E2E desktop (must pass)
+### E2E macOS desktop (must pass)
 - A->B text sync.
 - B->A image sync.
 - Allowed file sync under policy limit.

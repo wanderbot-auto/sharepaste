@@ -34,7 +34,7 @@
 
 5. Week 5 (2026-04-04 to 2026-04-10)
 - Complete desktop revoke and recovery flows.
-- Stabilize E2E scenarios across Windows/macOS.
+- Stabilize E2E scenarios across macOS versions.
 - Burn down P1 defects and document workarounds.
 
 6. Week 6 (2026-04-11 to 2026-04-18) -> M2

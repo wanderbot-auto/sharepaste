@@ -11,7 +11,7 @@ Ship a desktop-first clipboard sharing experience for internal pilot users, vali
 ## 2. Target Audience
 - Primary: Individual users with 2-3 personal devices.
 - Pilot size: 10-50 users.
-- Platform commitment in this phase: Windows and macOS desktop.
+- Platform commitment in this phase: macOS desktop (Swift native).
 
 ## 3. Scope
 ### In scope

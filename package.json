@@ -4,12 +4,13 @@
   "version": "0.1.0",
   "workspaces": [
     "server",
-    "client",
-    "desktop"
+    "client"
   ],
   "scripts": {
-    "build": "npm run -w server build && npm run -w client build && npm run -w desktop build",
-    "test": "npm run -w server test && npm run -w client test && npm run -w desktop test",
-    "lint": "npm run -w server lint && npm run -w client lint && npm run -w desktop lint"
+    "build": "npm run -w server build && npm run -w client build",
+    "test": "npm run -w server test && npm run -w client test",
+    "lint": "npm run -w server lint && npm run -w client lint",
+    "desktop:macos:dev": "swift run --package-path macos sharepaste-desktop",
+    "desktop:macos:build": "swift build --package-path macos -c release"
   }
 }

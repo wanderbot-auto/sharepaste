@@ -14,7 +14,7 @@
 Current server implementation is in-memory store. v0.1 implementation must move stateful domain data to durable storage for pilot continuity.
 
 ## 2. System Components
-- Desktop app (Tauri + React): user entry point for core journey.
+- Desktop app (macOS SwiftUI native): user entry point for core journey.
 - Client core (TS): policy check, sync engine, crypto envelope handling.
 - gRPC server: DeviceService, PairingService, PolicyService, SyncService.
 - Postgres: durable device/group/policy/audit/offline metadata.
