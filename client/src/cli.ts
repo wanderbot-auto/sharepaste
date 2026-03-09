@@ -14,7 +14,7 @@ const program = new Command();
 program.name("sharepaste-client").description("SharePaste cross-platform clipboard client").version("0.1.0");
 
 program
-  .option("--server <address>", "gRPC endpoint", process.env.SHAREPASTE_SERVER ?? "127.0.0.1:50051")
+  .option("--server <address>", "gRPC endpoint", process.env.SHAREPASTE_SERVER ?? "127.0.0.1:50052")
   .option("--state <path>", "local state file path")
   .option("--name <name>", "default device display name")
   .option("--json", "print machine-readable JSON output", false);

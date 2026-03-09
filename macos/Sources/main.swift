@@ -82,16 +82,16 @@ private enum BridgeError: LocalizedError {
 actor SharePasteBridge {
     private var syncProcess: Process?
 
-    func initDevice(options: CliOptions) throws -> DeviceState {
-        try runClientJSON(options: options, subcommand: "init", subArgs: [], as: DeviceState.self)
+    func initDevice(options: CliOptions) async throws -> DeviceState {
+        try await runClientJSON(options: options, subcommand: "init", subArgs: [], as: DeviceState.self)
     }
 
-    func recoverGroup(options: CliOptions, phrase: String) throws -> DeviceState {
+    func recoverGroup(options: CliOptions, phrase: String) async throws -> DeviceState {
         guard let deviceName = options.deviceName, !deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw BridgeError.commandFailed(command: "recover", detail: "deviceName is required for recovery")
         }
 
-        return try runClientJSON(
+        return try await runClientJSON(
             options: options,
             subcommand: "recover",
             subArgs: ["--phrase", phrase, "--name", deviceName],
@@ -99,13 +99,13 @@ actor SharePasteBridge {
         )
     }
 
-    func listDevices(options: CliOptions) throws -> [DeviceInfo] {
-        let response = try runClientJSON(options: options, subcommand: "devices", subArgs: [], as: DeviceListResponse.self)
+    func listDevices(options: CliOptions) async throws -> [DeviceInfo] {
+        let response = try await runClientJSON(options: options, subcommand: "devices", subArgs: [], as: DeviceListResponse.self)
         return response.devices
     }
 
-    func removeDevice(options: CliOptions, targetDeviceId: String) throws -> Bool {
-        let response = try runClientJSON(
+    func removeDevice(options: CliOptions, targetDeviceId: String) async throws -> Bool {
+        let response = try await runClientJSON(
             options: options,
             subcommand: "remove-device",
             subArgs: ["--target-device-id", targetDeviceId],
@@ -114,8 +114,8 @@ actor SharePasteBridge {
         return response.removed
     }
 
-    func getPolicy(options: CliOptions) throws -> SharePolicy {
-        try runClientJSON(options: options, subcommand: "policy-get", subArgs: [], as: SharePolicy.self)
+    func getPolicy(options: CliOptions) async throws -> SharePolicy {
+        try await runClientJSON(options: options, subcommand: "policy-get", subArgs: [], as: SharePolicy.self)
     }
 
     func updatePolicy(
@@ -125,8 +125,8 @@ actor SharePasteBridge {
         allowFile: Bool,
         allowEncryption: Bool,
         maxFileSizeBytes: Int
-    ) throws -> SharePolicy {
-        return try runClientJSON(
+    ) async throws -> SharePolicy {
+        return try await runClientJSON(
             options: options,
             subcommand: "policy",
             subArgs: [
@@ -140,20 +140,20 @@ actor SharePasteBridge {
         )
     }
 
-    func createBindCode(options: CliOptions) throws -> BindCode {
-        try runClientJSON(options: options, subcommand: "bind-code", subArgs: [], as: BindCode.self)
+    func createBindCode(options: CliOptions) async throws -> BindCode {
+        try await runClientJSON(options: options, subcommand: "bind-code", subArgs: [], as: BindCode.self)
     }
 
-    func requestBind(options: CliOptions, code: String) throws -> BindRequestResponse {
-        try runClientJSON(options: options, subcommand: "bind-request", subArgs: ["--code", code], as: BindRequestResponse.self)
+    func requestBind(options: CliOptions, code: String) async throws -> BindRequestResponse {
+        try await runClientJSON(options: options, subcommand: "bind-request", subArgs: ["--code", code], as: BindRequestResponse.self)
     }
 
-    func confirmBind(options: CliOptions, requestId: String, approve: Bool) throws -> ConfirmBindResponse {
+    func confirmBind(options: CliOptions, requestId: String, approve: Bool) async throws -> ConfirmBindResponse {
         var args = ["--request-id", requestId]
         if approve {
             args.append("--approve")
         }
-        return try runClientJSON(options: options, subcommand: "bind-confirm", subArgs: args, as: ConfirmBindResponse.self)
+        return try await runClientJSON(options: options, subcommand: "bind-confirm", subArgs: args, as: ConfirmBindResponse.self)
     }
 
     func syncStatus() -> SyncStatus {
@@ -166,16 +166,24 @@ actor SharePasteBridge {
     }
 
     func startSync(options: CliOptions) throws -> SyncStatus {
-        if let process = syncProcess, process.isRunning {
-            return SyncStatus(running: true, pid: process.processIdentifier)
+        // Double check: if process is running, return it.
+        // But also check if it's dead?
+        if let process = syncProcess {
+             if process.isRunning {
+                 return SyncStatus(running: true, pid: process.processIdentifier)
+             } else {
+                 // Dead reference
+                 syncProcess = nil
+             }
         }
-
-        syncProcess = nil
 
         let root = try resolveRepoRoot()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.currentDirectoryURL = root
+        // Daemon should not block, so no timeout needed here.
+        // Redirecting output to null or handling logs?
+        // User probably wants logs for debugging but for now null is fine as per existing code.
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
@@ -210,7 +218,7 @@ actor SharePasteBridge {
         subcommand: String,
         subArgs: [String],
         as type: T.Type
-    ) throws -> T {
+    ) async throws -> T {
         let root = try resolveRepoRoot()
 
         let process = Process()
@@ -229,9 +237,39 @@ actor SharePasteBridge {
 
         do {
             try process.run()
-            process.waitUntilExit()
+            
+            // Timeout implementation (5 seconds)
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let timeoutSeconds: Double = 5.0
+                
+                // Use a state variable protected by lock? No, continuation is one-shot.
+                // We can use a Task to monitor.
+                // Or simply rely on Process.terminationHandler which is thread-safe callback.
+                
+                // We must ensure continuation is resumed exactly once.
+                // We use an Atomic flag or just rely on the fact that if timeout fires, we terminate process, which fires terminationHandler?
+                // YES! process.terminate() triggers terminationHandler.
+                // So we only need to resume in terminationHandler.
+                // BUT we need to know if it was a timeout or normal exit to throw error or not?
+                // Actually if we terminate(), the exit status will be non-zero (SIGTERM 15).
+                // So we can detect it there.
+                
+                // Set up timeout task
+                let timeoutTask = Task {
+                    try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                    if process.isRunning {
+                        process.terminate() // This will trigger terminationHandler
+                    }
+                }
+                
+                process.terminationHandler = { _ in
+                    timeoutTask.cancel()
+                    continuation.resume()
+                }
+            }
         } catch {
-            throw BridgeError.commandFailed(command: subcommand, detail: error.localizedDescription)
+             // If run failed immediately
+             throw BridgeError.commandFailed(command: subcommand, detail: error.localizedDescription)
         }
 
         let outData = stdout.fileHandleForReading.readDataToEndOfFile()
@@ -332,7 +370,7 @@ enum ConnectionState {
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published var connectionState: ConnectionState = .disconnected
-    @Published var server = "127.0.0.1:50051"
+    @Published var server = "127.0.0.1:50052"
     @Published var statePath = ""
     @Published var deviceName = "my-mac"
 
@@ -362,8 +400,8 @@ final class AppViewModel: ObservableObject {
     @Published var connectionTimeout: Int = 5
     @Published var remainingSeconds: Int = 0
     private var connectionAttemptStartTime: Date?
-    private var isMonitoring = false
-
+    private var monitoringTask: Task<Void, Never>?
+    
     private let bridge = SharePasteBridge()
 
     var options: CliOptions {
@@ -384,16 +422,21 @@ final class AppViewModel: ObservableObject {
     }
 
     func refreshSyncStatus() async {
-        if !isMonitoring {
+        // If already monitoring, just let it be. But if disconnected/connecting, we might want to force a check.
+        // Actually, refreshSyncStatus is often called to *ensure* monitoring is active.
+        if monitoringTask == nil {
             startMonitoring()
+        } else if connectionState != .connected {
+             // If not connected, force restart monitoring to get immediate check
+             startMonitoring()
         }
     }
     
     func startMonitoring() {
-        guard !isMonitoring else { return }
-        isMonitoring = true
+        // Cancel existing task if any to restart immediately
+        monitoringTask?.cancel()
         
-        Task {
+        monitoringTask = Task {
             log("Starting connection monitoring loop")
             while !Task.isCancelled {
                 await checkConnectionStatus()
@@ -417,45 +460,33 @@ final class AppViewModel: ObservableObject {
     }
     
     private func checkConnectionStatus() async {
-        do {
-            // 1. Check if process is running
-            let status = await bridge.syncStatus()
-            self.syncStatus = status
-            
-            if !status.running {
-                if connectionState != .disconnected {
-                    log("State changed: \(connectionState) -> disconnected (Process stopped)")
-                    connectionState = .disconnected
-                    connectionAttemptStartTime = nil
-                }
-                return
-            }
-            
-            // 2. Process running, check server connectivity
-            // Use 'list' command as ping
-            do {
-                _ = try await bridge.listDevices(options: options)
-                
-                // Success
-                if connectionState != .connected {
-                    log("State changed: \(connectionState) -> connected (Server reachable)")
-                    connectionState = .connected
-                    connectionAttemptStartTime = nil
-                }
-            } catch {
-                // Failure
-                handleConnectionFailure(error: error)
-            }
-            
-        } catch {
-            // Status check failed (CLI error)
-            log("Status check failed: \(error)")
+        // 1. Check if process is running
+        let status = await bridge.syncStatus()
+        self.syncStatus = status
+
+        if !status.running {
             if connectionState != .disconnected {
-                 log("State changed: \(connectionState) -> disconnected (CLI error)")
-                 connectionState = .disconnected
-                 connectionAttemptStartTime = nil
+                log("State changed: \(connectionState) -> disconnected (Process stopped)")
+                connectionState = .disconnected
+                connectionAttemptStartTime = nil
             }
-            self.syncStatus = SyncStatus(running: false, pid: nil)
+            return
+        }
+
+        // 2. Process running, check server connectivity
+        // Use 'list' command as ping
+        do {
+            _ = try await bridge.listDevices(options: options)
+
+            // Success
+            if connectionState != .connected {
+                log("State changed: \(connectionState) -> connected (Server reachable)")
+                connectionState = .connected
+                connectionAttemptStartTime = nil
+            }
+        } catch {
+            // Failure
+            handleConnectionFailure(error: error)
         }
     }
     
@@ -619,7 +650,35 @@ final class AppViewModel: ObservableObject {
 
     func startSync() async {
         await runAction {
+            // Preflight to surface stale-state / unreachable-server errors directly.
+            _ = try await self.bridge.getPolicy(options: self.options)
+
+            // Check if already running
+            let status = await self.bridge.syncStatus()
+            if status.running {
+                // FORCE transition to connecting to give immediate feedback
+                self.connectionState = .connecting
+                self.connectionAttemptStartTime = Date()
+                self.remainingSeconds = self.connectionTimeout
+                
+                // Force check immediately via restarting monitoring
+                self.startMonitoring()
+                
+                return "Sync process already running, checking connection..."
+            }
+            
+            // Not running, start it
+            self.connectionState = .connecting
+            self.connectionAttemptStartTime = Date()
+            self.remainingSeconds = self.connectionTimeout
+            self.log("Starting sync process... Setting state to connecting")
+            
             self.syncStatus = try await self.bridge.startSync(options: self.options)
+            self.log("Sync process started. Running: \(self.syncStatus.running)")
+            
+            // Start monitoring immediately which will handle Connecting -> Connected state transition
+            self.startMonitoring()
+            
             return self.syncStatus.running ? "Clipboard auto-upload enabled" : "Unable to enable clipboard auto-upload"
         }
     }
@@ -630,6 +689,28 @@ final class AppViewModel: ObservableObject {
             return "Clipboard auto-upload stopped"
         }
     }
+    
+    func restartSync() async {
+        await runAction {
+            self.log("Restarting sync process...")
+            // Stop existing process
+            _ = await self.bridge.stopSync()
+            
+            // Force connecting state
+            self.connectionState = .connecting
+            self.connectionAttemptStartTime = Date()
+            self.remainingSeconds = self.connectionTimeout
+            
+            // Start new process
+            self.syncStatus = try await self.bridge.startSync(options: self.options)
+            self.log("Sync process restarted. Running: \(self.syncStatus.running)")
+            
+            // Start monitoring
+            self.startMonitoring()
+            
+            return self.syncStatus.running ? "Sync process restarted" : "Failed to restart sync"
+        }
+    }
 
     private func runAction(_ operation: @escaping () async throws -> String) async {
         busy = true
@@ -638,8 +719,19 @@ final class AppViewModel: ObservableObject {
         do {
             message = try await operation()
         } catch {
-            message = "Error: \(error.localizedDescription)"
+            message = diagnosticMessage(for: error)
         }
+    }
+
+    private func diagnosticMessage(for error: Error) -> String {
+        let raw = error.localizedDescription.lowercased()
+        if raw.contains("device not found") {
+            return "Error: local device state is stale on server. Please click Save & Initialize or Recover Group."
+        }
+        if raw.contains("unavailable") || raw.contains("failed to connect") {
+            return "Error: cannot reach server. Check Server address and ensure server is running."
+        }
+        return "Error: \(error.localizedDescription)"
     }
 }
 
@@ -784,7 +876,7 @@ struct SettingsView: View {
                 Text("Server Address")
                     .font(.caption)
                     .foregroundStyle(Color.textSecondary)
-                TextField("e.g. 127.0.0.1:50051", text: $vm.server)
+                TextField("e.g. 127.0.0.1:50052", text: $vm.server)
                     .textFieldStyle(.plain)
                     .padding(10)
                     .background(Color.background)
@@ -816,8 +908,16 @@ struct SettingsView: View {
             Button(action: { 
                 // Settings are bound to VM, so we just close
                 withAnimation { vm.showSettings = false }
-                // Trigger re-init if needed or just save
-                Task { await vm.initializeDevice() }
+                
+                // If running, restart to apply new settings (server, etc)
+                // If not running, just save (which is automatic via Published) and initialize
+                Task { 
+                    if vm.syncStatus.running {
+                        await vm.restartSync()
+                    } else {
+                        await vm.initializeDevice() 
+                    }
+                }
             }) {
                 Text("Save & Initialize")
                     .frame(maxWidth: .infinity)
@@ -894,11 +994,22 @@ struct ContentView: View {
         }
         .frame(width: 360, height: 600)
         .task {
+            // Initial Check
             await vm.refreshSyncStatus()
-            // Poll sync status
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                await vm.refreshSyncStatus()
+            // If disconnected, try to start sync automatically if user wants?
+            // User said: "程序启动时，尝试连接默认server地址"
+            // This implies we should try to connect (which means ensuring process is running if we treat 'start sync' as connecting).
+            // BUT "失败时显示离线" implies we try once.
+            // If process is NOT running, 'refreshSyncStatus' sets it to disconnected.
+            // If process IS running, it sets to connecting -> connected/disconnected.
+            // If the user means "Auto Start Sync on Launch", we should call startSync().
+            // Assuming "Try to connect" means "Check if we can connect", which refreshSyncStatus does if process is running.
+            // If process is NOT running, do we start it? Usually menu bar apps start their daemon.
+            // Let's assume we should attempt to START the sync process if it's not running.
+            
+            if !vm.syncStatus.running {
+                // Attempt to start
+                await vm.startSync()
             }
         }
     }
@@ -1045,29 +1156,50 @@ struct ContentView: View {
 
     private var quickActionsGrid: some View {
         HStack(spacing: Spacing.s) {
-            actionButton(
-                icon: "arrow.triangle.2.circlepath",
-                label: vm.syncStatus.running ? "Stop Sync" : "Start Sync",
-                color: vm.syncStatus.running ? Color.orange : Color.green
-            ) {
-                Task {
+            // Main Sync Control Button
+            switch vm.connectionState {
+            case .connected:
+                // Online -> Stop Sync
+                actionButton(icon: "stop.fill", label: "Stop Sync", color: .red) {
+                    Task { await vm.stopSync() }
+                }
+            case .connecting:
+                // Connecting -> Disabled Button showing Wait
+                actionButton(icon: "hourglass", label: "Connecting...", color: .orange) {
+                    // No action
+                }
+                .disabled(true)
+                .opacity(0.6)
+            case .disconnected:
+                // Offline (Process not running or Connection failed) -> Start Sync
+                // Even if process is technically running but disconnected, we treat it as 'needs start/retry'
+                // But if process IS running, startSync might just restart it or do nothing.
+                // Let's make sure startSync handles "restart if running but broken" or we just call refresh.
+                // Actually user said: "Status Offline -> Start Sync".
+                // So if we are in that state where process is running but we are offline (timeout),
+                // we probably want to try connecting again.
+                // But 'Start Sync' implies launching the process.
+                // If the process is already running, 'Start Sync' logic in VM should handle it gracefully (e.g. check status, if running, maybe just verify connection).
+                actionButton(icon: "play.fill", label: "Start Sync", color: .green) {
                     if vm.syncStatus.running {
-                        await vm.stopSync()
+                        // Running but Offline -> Restart
+                        Task { await vm.restartSync() }
                     } else {
-                        await vm.startSync()
+                        // Not Running -> Start
+                        Task { await vm.startSync() }
                     }
                 }
             }
-            .disabled(vm.busy)
 
-            actionButton(icon: "key.fill", label: "Bind Code", color: Color.primaryBlue) {
+            // Bind and Recover only available when connected
+            actionButton(icon: "key", label: "Bind Code", color: .primaryBlue) {
                 Task { await vm.generateBindCode() }
             }
             .disabled(vm.busy || vm.connectionState != .connected)
             .opacity(vm.connectionState != .connected ? 0.6 : 1.0)
             
             actionButton(icon: "lock.shield", label: "Recover", color: Color(hex: 0x8E5AF7)) {
-                 Task { await vm.recoverGroup() }
+                Task { await vm.recoverGroup() }
             }
             .disabled(vm.busy || vm.connectionState != .connected)
             .opacity(vm.connectionState != .connected ? 0.6 : 1.0)
