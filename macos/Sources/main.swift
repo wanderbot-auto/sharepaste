@@ -384,8 +384,10 @@ final class AppViewModel: ObservableObject {
     @Published var policyAllowFile = true
     @Published var policyAllowEncryption = true
     @Published var policyMaxFileSizeBytes = 3 * 1024 * 1024
+    @Published var policyMaxFileSizeMB = 3
 
     @Published var bindCode: BindCode?
+    @Published var bindCodeRemainingSeconds: Int = 0
     @Published var syncStatus = SyncStatus(running: false, pid: nil)
 
     @Published var bindInputCode = ""
@@ -401,6 +403,9 @@ final class AppViewModel: ObservableObject {
     @Published var remainingSeconds: Int = 0
     private var connectionAttemptStartTime: Date?
     private var monitoringTask: Task<Void, Never>?
+    private var bindCodeCountdownTask: Task<Void, Never>?
+    private var bindCodeAutoRefreshInFlight = false
+    private static let bytesPerMB = 1024 * 1024
     
     private let bridge = SharePasteBridge()
 
@@ -525,6 +530,79 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    private func bindCodeSecondsRemaining(for code: BindCode, now: Date = Date()) -> Int {
+        guard let expiryUnix = Double(code.expiresAtUnix) else {
+            return 0
+        }
+        let remaining = Int(ceil(expiryUnix - now.timeIntervalSince1970))
+        return max(0, remaining)
+    }
+
+    private static func bytesToMB(_ bytes: Int) -> Int {
+        if bytes <= 0 {
+            return 1
+        }
+        return max(1, (bytes + bytesPerMB - 1) / bytesPerMB)
+    }
+
+    private func syncBindCodeRemainingSeconds() -> Int {
+        guard let code = bindCode else {
+            bindCodeRemainingSeconds = 0
+            return 0
+        }
+        let remaining = bindCodeSecondsRemaining(for: code)
+        bindCodeRemainingSeconds = remaining
+        return remaining
+    }
+
+    private func stopBindCodeCountdown() {
+        bindCodeCountdownTask?.cancel()
+        bindCodeCountdownTask = nil
+    }
+
+    private func startBindCodeCountdown() {
+        stopBindCodeCountdown()
+        guard bindCode != nil else {
+            bindCodeRemainingSeconds = 0
+            return
+        }
+
+        bindCodeCountdownTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                let remaining = self.syncBindCodeRemainingSeconds()
+                if remaining == 0 {
+                    await self.autoRefreshBindCodeAfterExpiry()
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    private func applyBindCode(_ code: BindCode) {
+        bindCode = code
+        let remaining = bindCodeSecondsRemaining(for: code)
+        // Newly generated code should always restart at a full TTL display.
+        bindCodeRemainingSeconds = remaining > 0 ? remaining : 60
+        startBindCodeCountdown()
+    }
+
+    private func autoRefreshBindCodeAfterExpiry() async {
+        guard bindCode != nil else { return }
+        guard !bindCodeAutoRefreshInFlight else { return }
+
+        bindCodeAutoRefreshInFlight = true
+        defer { bindCodeAutoRefreshInFlight = false }
+
+        do {
+            let freshCode = try await bridge.createBindCode(options: options)
+            applyBindCode(freshCode)
+            message = "Bind code refreshed automatically"
+        } catch {
+            message = diagnosticMessage(for: error)
+        }
+    }
+
     func initializeDevice() async {
         await runAction {
             guard !self.deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -586,6 +664,7 @@ final class AppViewModel: ObservableObject {
             self.policyAllowFile = policy.allowFile
             self.policyAllowEncryption = policy.allowEncryption ?? true
             self.policyMaxFileSizeBytes = policy.maxFileSizeBytes
+            self.policyMaxFileSizeMB = Self.bytesToMB(policy.maxFileSizeBytes)
             self.policyVersion = policy.version
             self.policyLoaded = true
             return "Policy v\(policy.version) loaded"
@@ -597,19 +676,22 @@ final class AppViewModel: ObservableObject {
             guard self.policyLoaded else {
                 throw BridgeError.commandFailed(command: "policy", detail: "load policy first")
             }
+            let normalizedMB = max(1, self.policyMaxFileSizeMB)
+            let maxFileSizeBytes = normalizedMB * Self.bytesPerMB
             let next = try await self.bridge.updatePolicy(
                 options: self.options,
                 allowText: self.policyAllowText,
                 allowImage: self.policyAllowImage,
                 allowFile: self.policyAllowFile,
                 allowEncryption: self.policyAllowEncryption,
-                maxFileSizeBytes: max(1, self.policyMaxFileSizeBytes)
+                maxFileSizeBytes: maxFileSizeBytes
             )
             self.policyAllowText = next.allowText
             self.policyAllowImage = next.allowImage
             self.policyAllowFile = next.allowFile
             self.policyAllowEncryption = next.allowEncryption ?? true
             self.policyMaxFileSizeBytes = next.maxFileSizeBytes
+            self.policyMaxFileSizeMB = Self.bytesToMB(next.maxFileSizeBytes)
             self.policyVersion = next.version
             return "Policy updated to v\(next.version)"
         }
@@ -617,10 +699,8 @@ final class AppViewModel: ObservableObject {
 
     func generateBindCode() async {
         await runAction {
-            self.bindCode = try await self.bridge.createBindCode(options: self.options)
-            guard let code = self.bindCode else {
-                return "Bind code generation failed"
-            }
+            let code = try await self.bridge.createBindCode(options: self.options)
+            self.applyBindCode(code)
             return "Bind code \(code.code) created"
         }
     }
@@ -1319,36 +1399,61 @@ struct ContentView: View {
                     
                     Divider().background(Color.divider)
                     
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Spacing.s) {
+                        HStack {
                             Text("Max File Size")
                                 .font(.caption)
                                 .foregroundStyle(Color.textSecondary)
-                            TextField("Bytes", value: $vm.policyMaxFileSizeBytes, format: .number)
+                            Spacer()
+                            Text("Unit fixed: MB")
+                                .font(.caption2)
+                                .foregroundStyle(Color.textSecondary)
+                        }
+
+                        HStack(spacing: Spacing.s) {
+                            HStack(spacing: 0) {
+                                TextField(
+                                    "3",
+                                    value: Binding(
+                                        get: { vm.policyMaxFileSizeMB },
+                                        set: { vm.policyMaxFileSizeMB = max(1, $0) }
+                                    ),
+                                    format: .number
+                                )
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 14, weight: .medium))
-                                .padding(8)
-                                .background(Color.background)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                .multilineTextAlignment(.center)
+                                .frame(width: 84)
+
+                                Divider()
+                                    .background(Color.divider)
+
+                                Text("MB")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Color.textSecondary)
+                                    .frame(width: 52)
+                            }
+                            .frame(height: 40)
+                            .background(Color.background)
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.s))
+
+                            Button {
+                                Task { await vm.savePolicy() }
+                            } label: {
+                                Label("Save Policy", systemImage: "checkmark.circle.fill")
+                            }
+                            .buttonStyle(PrimaryButtonStyle(fullWidth: true, height: 40, padding: 14))
                         }
-                        
-                        Spacer()
-                        
-                        Button("Save") {
-                            Task { await vm.savePolicy() }
-                        }
-                        .buttonStyle(PrimaryButtonStyle())
                     }
                 } else {
-                    HStack {
-                        Spacer()
-                        Button("Load Policy") {
-                            Task { await vm.loadPolicy() }
-                        }
-                        .buttonStyle(PrimaryButtonStyle()) // Uses default adaptive width
-                        Spacer()
+                    Button {
+                        Task { await vm.loadPolicy() }
+                    } label: {
+                        Label("Load Policy", systemImage: "arrow.down.circle.fill")
+                            .frame(maxWidth: .infinity)
                     }
-                    .padding(.vertical, Spacing.m)
+                    .buttonStyle(PrimaryButtonStyle(fullWidth: true, height: 40, padding: 14))
+                    .padding(.vertical, Spacing.s)
                 }
                 
                 // Binding Input
@@ -1387,7 +1492,7 @@ struct ContentView: View {
                             .font(.system(size: 36, weight: .bold, design: .monospaced))
                             .foregroundStyle(Color.primaryBlue)
                             .kerning(4)
-                        Text("Expires in \(Int((Double(code.expiresAtUnix) ?? 0) - Date().timeIntervalSince1970))s")
+                        Text("Expires in \(max(0, vm.bindCodeRemainingSeconds))s")
                             .font(.caption)
                             .foregroundStyle(Color.textSecondary)
                     }
