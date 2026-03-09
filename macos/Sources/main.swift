@@ -367,6 +367,18 @@ enum ConnectionState {
     case connected
 }
 
+enum ValidationError: LocalizedError {
+    case emptyInput(field: String)
+    case invalidFormat(field: String, reason: String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .emptyInput(let field): return "\(field)不能为空"
+        case .invalidFormat(let field, let reason): return "\(field)格式错误: \(reason)"
+        }
+    }
+}
+
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published var connectionState: ConnectionState = .disconnected
@@ -395,7 +407,7 @@ final class AppViewModel: ObservableObject {
     @Published var removeTargetId = ""
     @Published var recoveryPhrase = ""
     @Published var busy = false
-    @Published var message = "Ready"
+    @Published var currentMessage: UserMessage?
     @Published var showSettings = false
 
     // Connection Monitoring
@@ -404,6 +416,7 @@ final class AppViewModel: ObservableObject {
     private var connectionAttemptStartTime: Date?
     private var monitoringTask: Task<Void, Never>?
     private var bindCodeCountdownTask: Task<Void, Never>?
+    private var autoDismissTask: Task<Void, Never>?
     private var bindCodeAutoRefreshInFlight = false
     private static let bytesPerMB = 1024 * 1024
     
@@ -597,16 +610,16 @@ final class AppViewModel: ObservableObject {
         do {
             let freshCode = try await bridge.createBindCode(options: options)
             applyBindCode(freshCode)
-            message = "Bind code refreshed automatically"
+            // Quiet success
         } catch {
-            message = diagnosticMessage(for: error)
+            showError(error)
         }
     }
 
     func initializeDevice() async {
         await runAction {
             guard !self.deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw BridgeError.commandFailed(command: "init", detail: "device name is required")
+                throw ValidationError.emptyInput(field: "设备名称")
             }
             let state = try await self.bridge.initDevice(options: self.options)
             self.deviceState = state
@@ -616,14 +629,14 @@ final class AppViewModel: ObservableObject {
             } else {
                 self.syncStatus = try await self.bridge.startSync(options: self.options)
             }
-            return "Initialized \(state.deviceId). Clipboard auto-upload enabled."
+            return "初始化成功: \(state.deviceId)。剪贴板自动同步已开启。"
         }
     }
 
     func recoverGroup() async {
         await runAction {
             guard !self.recoveryPhrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw BridgeError.commandFailed(command: "recover", detail: "recovery phrase is required")
+                throw ValidationError.emptyInput(field: "恢复短语")
             }
             let state = try await self.bridge.recoverGroup(options: self.options, phrase: self.recoveryPhrase)
             self.deviceState = state
@@ -633,14 +646,14 @@ final class AppViewModel: ObservableObject {
             } else {
                 self.syncStatus = try await self.bridge.startSync(options: self.options)
             }
-            return "Recovered into group \(state.groupId). Clipboard auto-upload enabled."
+            return "恢复成功: \(state.groupId)。剪贴板自动同步已开启。"
         }
     }
 
     func loadDevices() async {
         await runAction {
             self.devices = try await self.bridge.listDevices(options: self.options)
-            return "Loaded \(self.devices.count) devices"
+            return "已加载 \(self.devices.count) 个设备"
         }
     }
 
@@ -648,11 +661,11 @@ final class AppViewModel: ObservableObject {
         await runAction {
             let target = self.removeTargetId.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !target.isEmpty else {
-                throw BridgeError.commandFailed(command: "remove-device", detail: "target device id is required")
+                throw ValidationError.emptyInput(field: "目标设备ID")
             }
             let removed = try await self.bridge.removeDevice(options: self.options, targetDeviceId: target)
             self.devices = try await self.bridge.listDevices(options: self.options)
-            return removed ? "Device removed from group" : "Device removal failed"
+            return removed ? "设备已移除" : "设备移除失败"
         }
     }
 
@@ -667,7 +680,7 @@ final class AppViewModel: ObservableObject {
             self.policyMaxFileSizeMB = Self.bytesToMB(policy.maxFileSizeBytes)
             self.policyVersion = policy.version
             self.policyLoaded = true
-            return "Policy v\(policy.version) loaded"
+            return "策略 v\(policy.version) 已加载"
         }
     }
 
@@ -693,7 +706,7 @@ final class AppViewModel: ObservableObject {
             self.policyMaxFileSizeBytes = next.maxFileSizeBytes
             self.policyMaxFileSizeMB = Self.bytesToMB(next.maxFileSizeBytes)
             self.policyVersion = next.version
-            return "Policy updated to v\(next.version)"
+            return "策略已更新至 v\(next.version)"
         }
     }
 
@@ -701,7 +714,7 @@ final class AppViewModel: ObservableObject {
         await runAction {
             let code = try await self.bridge.createBindCode(options: self.options)
             self.applyBindCode(code)
-            return "Bind code \(code.code) created"
+            return "绑定码 \(code.code) 已生成"
         }
     }
 
@@ -709,11 +722,14 @@ final class AppViewModel: ObservableObject {
         await runAction {
             let code = self.bindInputCode.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !code.isEmpty else {
-                throw BridgeError.commandFailed(command: "bind-request", detail: "bind code is required")
+                throw ValidationError.emptyInput(field: "绑定码")
+            }
+            if code.count > 100 {
+                throw ValidationError.invalidFormat(field: "绑定码", reason: "长度不能超过100字符")
             }
             let response = try await self.bridge.requestBind(options: self.options, code: code)
             self.requestId = response.requestId
-            return "Bind request \(response.requestId) sent"
+            return "已发送绑定请求: \(response.requestId)"
         }
     }
 
@@ -721,10 +737,10 @@ final class AppViewModel: ObservableObject {
         await runAction {
             let req = self.requestId.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !req.isEmpty else {
-                throw BridgeError.commandFailed(command: "bind-confirm", detail: "request id is required")
+                throw ValidationError.emptyInput(field: "请求ID")
             }
             let response = try await self.bridge.confirmBind(options: self.options, requestId: req, approve: approve)
-            return response.approved ? "Request approved into \(response.groupId)" : "Request rejected"
+            return response.approved ? "请求已批准，加入群组 \(response.groupId)" : "请求已拒绝"
         }
     }
 
@@ -744,7 +760,7 @@ final class AppViewModel: ObservableObject {
                 // Force check immediately via restarting monitoring
                 self.startMonitoring()
                 
-                return "Sync process already running, checking connection..."
+                return "同步进程已运行，正在检查连接..."
             }
             
             // Not running, start it
@@ -759,14 +775,14 @@ final class AppViewModel: ObservableObject {
             // Start monitoring immediately which will handle Connecting -> Connected state transition
             self.startMonitoring()
             
-            return self.syncStatus.running ? "Clipboard auto-upload enabled" : "Unable to enable clipboard auto-upload"
+            return self.syncStatus.running ? "剪贴板自动同步已开启" : "无法开启剪贴板同步"
         }
     }
 
     func stopSync() async {
         await runAction {
             self.syncStatus = await self.bridge.stopSync()
-            return "Clipboard auto-upload stopped"
+            return "剪贴板自动同步已停止"
         }
     }
     
@@ -788,7 +804,7 @@ final class AppViewModel: ObservableObject {
             // Start monitoring
             self.startMonitoring()
             
-            return self.syncStatus.running ? "Sync process restarted" : "Failed to restart sync"
+            return self.syncStatus.running ? "同步进程已重启" : "同步重启失败"
         }
     }
 
@@ -797,21 +813,98 @@ final class AppViewModel: ObservableObject {
         defer { busy = false }
 
         do {
-            message = try await operation()
+            let msg = try await operation()
+            // 如果返回空字符串，则不显示成功提示（用于静默操作）
+            if !msg.isEmpty {
+                showMessage("操作成功", msg, type: .success, autoDismiss: true)
+            }
         } catch {
-            message = diagnosticMessage(for: error)
+            showError(error)
         }
     }
+    
+    private func showMessage(_ title: String, _ message: String, type: UserMessage.MessageType = .info, autoDismiss: Bool = false) {
+        // 取消之前的自动消失任务
+        autoDismissTask?.cancel()
+        autoDismissTask = nil
+        
+        let newMessage = UserMessage(type: type, title: title, message: message, autoDismiss: autoDismiss)
+        
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7, blendDuration: 0)) {
+            currentMessage = newMessage
+        }
+        
+        if autoDismiss {
+            autoDismissTask = Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if !Task.isCancelled {
+                    // 必须回到主线程操作UI状态
+                    Task { @MainActor in
+                        // 再次检查ID，防止在sleep期间有了新消息被错误清除
+                        if self.currentMessage?.id == newMessage.id {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7, blendDuration: 0)) {
+                                self.currentMessage = nil
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func showError(_ error: Error) {
+        let (title, msg) = parseError(error)
+        // 错误提示不自动消失，除非是特定类型的轻微提示？目前保持手动关闭。
+        showMessage(title, msg, type: .error, autoDismiss: false)
+    }
 
-    private func diagnosticMessage(for error: Error) -> String {
-        let raw = error.localizedDescription.lowercased()
-        if raw.contains("device not found") {
-            return "Error: local device state is stale on server. Please click Save & Initialize or Recover Group."
+    private func parseError(_ error: Error) -> (String, String) {
+        if let validationError = error as? ValidationError {
+            return ("输入错误", validationError.errorDescription ?? "未知输入错误")
         }
-        if raw.contains("unavailable") || raw.contains("failed to connect") {
-            return "Error: cannot reach server. Check Server address and ensure server is running."
+        
+        let raw = error.localizedDescription
+        let lower = raw.lowercased()
+        
+        // 尝试从JSON输出中提取具体错误
+        if let jsonError = extractJSONError(from: raw) {
+             let lowerJson = jsonError.lowercased()
+             if lowerJson.contains("bind code expired") || lowerJson.contains("bind code not found") {
+                 return ("绑定失败", "该绑定码未找到，请检查是否输入正确或联系管理员获取有效绑定码")
+             }
+             if lowerJson.contains("already bound") {
+                 return ("绑定失败", "设备已在该群组中，无需重复绑定")
+             }
+             // Fallback to raw JSON error if generic
+             return ("服务器错误", jsonError)
         }
-        return "Error: \(error.localizedDescription)"
+        
+        if lower.contains("device not found") {
+            return ("设备状态异常", "本地设备状态与服务器不一致，请点击“保存并初始化”或“恢复群组”")
+        }
+        if lower.contains("unavailable") || lower.contains("failed to connect") {
+            return ("连接失败", "无法连接到服务器，请检查服务器地址是否正确以及服务器是否运行中")
+        }
+        
+        // Fallback
+        return ("发生错误", raw)
+    }
+    
+    private func extractJSONError(from text: String) -> String? {
+        do {
+            // Pattern: "error":"..."
+            let pattern = "\"error\":\"(.*?)\""
+            let regex = try NSRegularExpression(pattern: pattern, options: [])
+            let nsString = text as NSString
+            if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: nsString.length)) {
+                if let range = Range(match.range(at: 1), in: text) {
+                    return String(text[range])
+                }
+            }
+        } catch {
+            return nil
+        }
+        return nil
     }
 }
 
@@ -1038,14 +1131,6 @@ struct ContentView: View {
                     // Settings / Policy
                     policyCard
 
-                    // Footer Message
-                    if !vm.message.isEmpty && vm.message != "Ready" {
-                        Text(vm.message)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(Color.textSecondary)
-                            .padding(.top, Spacing.s)
-                    }
-
                     // Offline Indicator
                     if !vm.syncStatus.running {
                         Text("Offline: Automatic sync paused")
@@ -1057,6 +1142,7 @@ struct ContentView: View {
                 }
                 .padding(Spacing.l)
             }
+            .scrollIndicators(.hidden)
             .blur(radius: vm.showSettings ? 4 : 0) // Blur background when settings open
             
             // Settings Overlay
@@ -1070,6 +1156,24 @@ struct ContentView: View {
                 SettingsView(vm: vm)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(1)
+            }
+            
+            // Message Overlay
+            if let msg = vm.currentMessage {
+                VStack {
+                    Spacer()
+                    MessageView(message: msg) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7, blendDuration: 0)) {
+                            vm.currentMessage = nil
+                        }
+                    }
+                    .padding(.bottom, Spacing.l)
+                }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                    removal: .opacity.combined(with: .move(edge: .bottom))
+                ))
+                .zIndex(2)
             }
         }
         .frame(width: 360, height: 600)
@@ -1433,17 +1537,21 @@ struct ContentView: View {
                                     .foregroundStyle(Color.textSecondary)
                                     .frame(width: 52)
                             }
-                            .frame(height: 40)
+                            .frame(height: 36)
                             .background(Color.background)
                             .clipShape(RoundedRectangle(cornerRadius: Radius.s))
+
+                            Spacer(minLength: 0)
 
                             Button {
                                 Task { await vm.savePolicy() }
                             } label: {
                                 Label("Save Policy", systemImage: "checkmark.circle.fill")
+                                    .frame(width: 122)
                             }
-                            .buttonStyle(PrimaryButtonStyle(fullWidth: true, height: 40, padding: 14))
+                            .buttonStyle(PrimaryButtonStyle(height: 36, padding: 12))
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
                     Button {
@@ -1555,6 +1663,93 @@ struct ContentView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .medium
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - Error Handling Models
+
+struct UserMessage: Identifiable, Equatable {
+    let id = UUID()
+    enum MessageType {
+        case success
+        case error
+        case warning
+        case info
+    }
+    let type: MessageType
+    let title: String
+    let message: String
+    let autoDismiss: Bool
+    
+    init(type: MessageType, title: String, message: String, autoDismiss: Bool = false) {
+        self.type = type
+        self.title = title
+        self.message = message
+        self.autoDismiss = autoDismiss
+    }
+    
+    var color: Color {
+        switch type {
+        case .success: return Color(hex: 0x34C759) // iOS System Green
+        case .error: return Color(hex: 0xFF9500) // iOS System Orange (柔和警告)
+        case .warning: return Color(hex: 0xFFCC00) // iOS System Yellow
+        case .info: return Color.primaryBlue // 使用主题色
+        }
+    }
+    
+    var icon: String {
+        switch type {
+        case .success: return "checkmark.circle.fill"
+        case .error: return "exclamationmark.triangle.fill"
+        case .warning: return "exclamationmark.circle.fill"
+        case .info: return "info.circle.fill"
+        }
+    }
+}
+
+struct MessageView: View {
+    let message: UserMessage
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: message.icon)
+                .font(.system(size: 18))
+                .foregroundStyle(message.color)
+                .padding(.top, 2)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(message.title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.textPrimary)
+                
+                Text(message.message)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+            
+            if !message.autoDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(Color.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(message.color.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 6)
+        .padding(.horizontal, 16)
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 
