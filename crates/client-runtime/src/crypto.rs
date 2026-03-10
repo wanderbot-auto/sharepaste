@@ -2,7 +2,10 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{
+    Engine as _,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::Rng;
 use rand_core::OsRng;
@@ -13,6 +16,14 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeviceIdentity {
+    pub sign_public_key: String,
+    pub sign_private_key: String,
+    pub wrap_public_key: String,
+    pub wrap_private_key: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PemDeviceIdentity {
     pub sign_public_key: String,
     pub sign_private_key: String,
     pub wrap_public_key: String,
@@ -34,6 +45,7 @@ pub enum CryptoError {
     },
     Base64(base64::DecodeError),
     Json(serde_json::Error),
+    InvalidPem(&'static str),
     Aead,
 }
 
@@ -52,6 +64,7 @@ impl fmt::Display for CryptoError {
             }
             Self::Base64(err) => write!(f, "base64 decode failed: {err}"),
             Self::Json(err) => write!(f, "json decode failed: {err}"),
+            Self::InvalidPem(field) => write!(f, "invalid pem payload for {field}"),
             Self::Aead => write!(f, "authenticated encryption operation failed"),
         }
     }
@@ -81,6 +94,15 @@ struct SealedEnvelope {
     ciphertext: String,
 }
 
+const ED25519_PUBLIC_DER_PREFIX: &[u8] = &[0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00];
+const ED25519_PRIVATE_DER_PREFIX: &[u8] = &[
+    0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+];
+const X25519_PUBLIC_DER_PREFIX: &[u8] = &[0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x03, 0x21, 0x00];
+const X25519_PRIVATE_DER_PREFIX: &[u8] = &[
+    0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x04, 0x22, 0x04, 0x20,
+];
+
 impl CryptoRuntime {
     pub fn new() -> Self {
         Self
@@ -98,6 +120,30 @@ impl CryptoRuntime {
             wrap_public_key: encode_base64url(wrap_public_key.as_bytes()),
             wrap_private_key: encode_base64url(wrap_private_key.to_bytes()),
         }
+    }
+
+    pub fn create_identity_pem(&self) -> PemDeviceIdentity {
+        let identity = self.create_identity();
+        self.identity_to_pem(&identity)
+            .expect("generated raw identity should always encode to PEM")
+    }
+
+    pub fn identity_to_pem(&self, identity: &DeviceIdentity) -> Result<PemDeviceIdentity, CryptoError> {
+        Ok(PemDeviceIdentity {
+            sign_public_key: self.sign_public_key_to_pem(&identity.sign_public_key)?,
+            sign_private_key: self.sign_private_key_to_pem(&identity.sign_private_key)?,
+            wrap_public_key: self.wrap_public_key_to_pem(&identity.wrap_public_key)?,
+            wrap_private_key: self.wrap_private_key_to_pem(&identity.wrap_private_key)?,
+        })
+    }
+
+    pub fn identity_from_pem(&self, identity: &PemDeviceIdentity) -> Result<DeviceIdentity, CryptoError> {
+        Ok(DeviceIdentity {
+            sign_public_key: self.sign_public_key_from_pem(&identity.sign_public_key)?,
+            sign_private_key: self.sign_private_key_from_pem(&identity.sign_private_key)?,
+            wrap_public_key: self.wrap_public_key_from_pem(&identity.wrap_public_key)?,
+            wrap_private_key: self.wrap_private_key_from_pem(&identity.wrap_private_key)?,
+        })
     }
 
     pub fn generate_group_key(&self) -> Vec<u8> {
@@ -187,6 +233,64 @@ impl CryptoRuntime {
             .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
             .map_err(|_| CryptoError::Aead)
     }
+
+    pub fn sign_public_key_to_pem(&self, raw_key: &str) -> Result<String, CryptoError> {
+        self.raw_key_to_pem(raw_key, ED25519_PUBLIC_DER_PREFIX, "PUBLIC KEY")
+    }
+
+    pub fn sign_private_key_to_pem(&self, raw_key: &str) -> Result<String, CryptoError> {
+        self.raw_key_to_pem(raw_key, ED25519_PRIVATE_DER_PREFIX, "PRIVATE KEY")
+    }
+
+    pub fn wrap_public_key_to_pem(&self, raw_key: &str) -> Result<String, CryptoError> {
+        self.raw_key_to_pem(raw_key, X25519_PUBLIC_DER_PREFIX, "PUBLIC KEY")
+    }
+
+    pub fn wrap_private_key_to_pem(&self, raw_key: &str) -> Result<String, CryptoError> {
+        self.raw_key_to_pem(raw_key, X25519_PRIVATE_DER_PREFIX, "PRIVATE KEY")
+    }
+
+    pub fn sign_public_key_from_pem(&self, pem: &str) -> Result<String, CryptoError> {
+        self.pem_to_raw_key(pem, ED25519_PUBLIC_DER_PREFIX, "sign_public_key")
+    }
+
+    pub fn sign_private_key_from_pem(&self, pem: &str) -> Result<String, CryptoError> {
+        self.pem_to_raw_key(pem, ED25519_PRIVATE_DER_PREFIX, "sign_private_key")
+    }
+
+    pub fn wrap_public_key_from_pem(&self, pem: &str) -> Result<String, CryptoError> {
+        self.pem_to_raw_key(pem, X25519_PUBLIC_DER_PREFIX, "wrap_public_key")
+    }
+
+    pub fn wrap_private_key_from_pem(&self, pem: &str) -> Result<String, CryptoError> {
+        self.pem_to_raw_key(pem, X25519_PRIVATE_DER_PREFIX, "wrap_private_key")
+    }
+
+    fn raw_key_to_pem(
+        &self,
+        raw_key: &str,
+        der_prefix: &[u8],
+        label: &'static str,
+    ) -> Result<String, CryptoError> {
+        let key = URL_SAFE_NO_PAD.decode(raw_key)?;
+        let mut der = Vec::with_capacity(der_prefix.len() + key.len());
+        der.extend_from_slice(der_prefix);
+        der.extend_from_slice(&key);
+        Ok(der_to_pem(label, &der))
+    }
+
+    fn pem_to_raw_key(
+        &self,
+        pem: &str,
+        der_prefix: &[u8],
+        field: &'static str,
+    ) -> Result<String, CryptoError> {
+        let der = pem_to_der(pem)?;
+        if der.len() <= der_prefix.len() || !der.starts_with(der_prefix) {
+            return Err(CryptoError::InvalidPem(field));
+        }
+        Ok(encode_base64url(&der[der_prefix.len()..]))
+    }
 }
 
 fn cipher_from_key(key: &[u8], field: &'static str) -> Result<Aes256Gcm, CryptoError> {
@@ -223,4 +327,31 @@ fn random_bytes(len: usize) -> Vec<u8> {
     let mut bytes = vec![0_u8; len];
     rand::rng().fill(bytes.as_mut_slice());
     bytes
+}
+
+fn der_to_pem(label: &'static str, der: &[u8]) -> String {
+    let encoded = STANDARD.encode(der);
+    let body = encoded
+        .as_bytes()
+        .chunks(64)
+        .map(|chunk| std::str::from_utf8(chunk).expect("base64 output is valid utf8"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("-----BEGIN {label}-----\n{body}\n-----END {label}-----\n")
+}
+
+fn pem_to_der(pem: &str) -> Result<Vec<u8>, CryptoError> {
+    let body = pem
+        .lines()
+        .filter(|line| !line.starts_with("-----BEGIN ") && !line.starts_with("-----END "))
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<String>();
+
+    if body.is_empty() {
+        return Err(CryptoError::InvalidPem("pem"));
+    }
+
+    STANDARD.decode(body).map_err(CryptoError::Base64)
 }
