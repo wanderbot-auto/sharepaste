@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">SharePaste</string>
+    <string name="sync_notification_channel_name">SharePaste Sync</string>
+    <string name="sync_notification_channel_description">Keeps the SharePaste realtime connection alive.</string>
+    <string name="sync_notification_title">SharePaste sync active</string>
+    <string name="sync_notification_text">Realtime sync is running in the foreground.</string>
+    <string name="action_stop_sync">Stop sync</string>
+    <string name="action_open_app">Open app</string>
+</resources>

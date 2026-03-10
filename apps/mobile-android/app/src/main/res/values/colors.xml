@@ -1,0 +1,5 @@
+<resources>
+    <color name="sharepaste_primary">#2A85FF</color>
+    <color name="sharepaste_background">#F4F5F7</color>
+    <color name="sharepaste_surface">#FFFFFF</color>
+</resources>

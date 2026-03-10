@@ -1,9 +1,23 @@
-# mobile-android
+# SharePaste Android
 
-Planned Android client shell.
+Native Android client for SharePaste.
 
-Suggested direction:
+## Status
 
-- Keep Android permissions, services, notifications, and lifecycle handling here.
-- Reuse transport and state logic from shared packages where possible.
-- Treat clipboard/background behavior as mobile-specific, not as a desktop extension.
+This module now contains a full Android Studio project scaffold with:
+
+- Jetpack Compose dashboard UI
+- gRPC transport wired to `packages/proto/sharepaste.proto`
+- foreground sync service
+- local session persistence
+- share target entrypoint for text/image/file payloads
+
+## Planned runtime behavior
+
+- Foreground: app can observe clipboard text changes and auto-send.
+- Background: app keeps the realtime connection alive via a foreground service.
+- System-wide clipboard auto-read is intentionally not attempted in background because Android restricts it on modern versions.
+
+## Open locally
+
+Open `apps/mobile-android` in Android Studio.
