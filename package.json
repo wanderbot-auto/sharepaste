@@ -8,9 +8,11 @@
     "packages/client-core"
   ],
   "scripts": {
-    "build": "npm run core:build && npm run server:build && npm run client:build",
-    "test": "npm run core:test && npm run server:test && npm run client:test",
+    "build": "npm run core:build && npm run server:build && npm run client:build && npm run rust:check",
+    "test": "npm run core:test && npm run server:test && npm run client:test && npm run rust:test",
     "lint": "npm run core:lint && npm run server:lint && npm run client:lint",
+    "rust:test": "cargo test -p sharepaste-client-runtime",
+    "rust:check": "cargo test -p sharepaste-client-runtime --no-run",
     "core:build": "npm run -w @sharepaste/client-core build",
     "core:test": "npm run -w @sharepaste/client-core test",
     "core:lint": "npm run -w @sharepaste/client-core lint",

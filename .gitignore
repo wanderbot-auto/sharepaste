@@ -9,3 +9,4 @@ coverage/
 apps/desktop-macos/.build/
 apps/desktop-macos/.swiftpm/
 .sharepaste-dev/
+target/

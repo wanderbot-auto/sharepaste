@@ -11,6 +11,8 @@ This repository ships:
 - `apps/desktop-linux/`: planned Linux desktop shell
 - `apps/mobile-android/`: planned Android client
 - `packages/proto/`: shared gRPC contract
+- `packages/client-core/`: current TypeScript reference implementation of shared client logic
+- `crates/client-runtime/`: long-term Rust shared runtime for cross-platform consistency
 
 ## Implemented v1 capabilities
 
@@ -35,7 +37,9 @@ This repository ships:
   - `core/crypto-agent.ts`
   - `core/sharepaste-client.ts`
 - `/apps/desktop-macos/Sources`: native macOS shell
+- `/packages/client-core/src`: current extracted TypeScript client runtime modules
 - `/packages/proto/sharepaste.proto`: shared protocol schema
+- `/crates/client-runtime/src`: Rust shared runtime modules
 - `/docs/architecture/repo-structure.md`: repo layout and ownership guide
 
 ## Development preparation docs
@@ -88,6 +92,7 @@ npm run client:dev -- send-image --path ./image.png
 
 ```bash
 npm test
+cargo test -p sharepaste-client-runtime
 ```
 
 Run storage integration tests (requires local Postgres + Redis):
