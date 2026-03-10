@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CryptoAgent } from "@sharepaste/client-core";
 import { SharePasteClient } from "../src/core/sharepaste-client.js";
-import { CryptoAgent } from "../src/core/crypto-agent.js";
 import { SharePasteGrpcClient } from "../src/core/grpc-client.js";
 import { StateStore, type PersistedState } from "../src/core/state-store.js";
 

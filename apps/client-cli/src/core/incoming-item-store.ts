@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import type { ClipboardPayload } from "../types.js";
+import type { ClipboardPayload } from "@sharepaste/client-core";
 
 const extensionForMime = (payload: ClipboardPayload): string => {
   const mime = payload.mime.toLowerCase();

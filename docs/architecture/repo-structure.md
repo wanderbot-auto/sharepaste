@@ -36,7 +36,7 @@ scripts/              Local developer entrypoints
 
 ## Near-Term Refactor Path
 
-1. Extract pure TypeScript domain logic from `apps/client-cli` into `packages/client-core`.
+1. Keep extracting pure TypeScript domain logic from `apps/client-cli` into `packages/client-core`.
 2. Keep per-platform shell code in `apps/desktop-*` and `apps/mobile-*`.
 3. Add generated SDK output under a future `packages/sdk-*` only after at least two consumers need it.
 4. Keep protocol evolution centralized in `packages/proto`.

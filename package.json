@@ -4,12 +4,16 @@
   "version": "0.1.0",
   "workspaces": [
     "apps/server",
-    "apps/client-cli"
+    "apps/client-cli",
+    "packages/client-core"
   ],
   "scripts": {
-    "build": "npm run server:build && npm run client:build",
-    "test": "npm run server:test && npm run client:test",
-    "lint": "npm run server:lint && npm run client:lint",
+    "build": "npm run core:build && npm run server:build && npm run client:build",
+    "test": "npm run core:test && npm run server:test && npm run client:test",
+    "lint": "npm run core:lint && npm run server:lint && npm run client:lint",
+    "core:build": "npm run -w @sharepaste/client-core build",
+    "core:test": "npm run -w @sharepaste/client-core test",
+    "core:lint": "npm run -w @sharepaste/client-core lint",
     "server:dev": "npm run -w @sharepaste/server dev",
     "server:build": "npm run -w @sharepaste/server build",
     "server:test": "npm run -w @sharepaste/server test",

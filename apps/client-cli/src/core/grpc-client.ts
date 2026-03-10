@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { credentials, loadPackageDefinition, type ClientDuplexStream } from "@grpc/grpc-js";
 import { loadSync } from "@grpc/proto-loader";
-import type { ClipboardPayload, SharePolicy } from "../types.js";
+import type { ClipboardPayload, SharePolicy } from "@sharepaste/client-core";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

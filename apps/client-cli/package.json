@@ -8,18 +8,22 @@
     "sharepaste-client": "dist/src/cli.js"
   },
   "scripts": {
+    "predev": "npm run -w @sharepaste/client-core build",
     "dev": "node ../../node_modules/tsx/dist/cli.mjs src/cli.ts",
+    "prebuild": "npm run -w @sharepaste/client-core build",
     "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "pretest": "npm run -w @sharepaste/client-core build",
     "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "prelint": "npm run -w @sharepaste/client-core build",
     "lint": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@sharepaste/client-core": "*",
     "@grpc/grpc-js": "^1.14.1",
     "@grpc/proto-loader": "^0.8.0",
     "clipboardy": "^5.0.0",
     "commander": "^14.0.1",
-    "multicast-dns": "^7.2.5",
-    "nanoid": "^5.1.6"
+    "multicast-dns": "^7.2.5"
   },
   "devDependencies": {
     "@types/multicast-dns": "^7.2.4",

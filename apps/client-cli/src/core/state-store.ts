@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { DeviceIdentity } from "./crypto-agent.js";
+import type { DeviceIdentity } from "@sharepaste/client-core";
 
 export interface PersistedState {
   deviceId: string;

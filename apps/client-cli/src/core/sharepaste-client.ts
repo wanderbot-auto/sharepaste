@@ -2,15 +2,12 @@ import os from "node:os";
 import { Buffer } from "node:buffer";
 import { promises as fs } from "node:fs";
 import type { ClientDuplexStream } from "@grpc/grpc-js";
+import type { ClipboardPayload } from "@sharepaste/client-core";
+import { CryptoAgent, HistoryStore, SyncEngine, defaultPolicy } from "@sharepaste/client-core";
 import { ClipboardWatcher } from "../adapters/clipboard-watcher.js";
-import type { ClipboardPayload } from "../types.js";
-import { CryptoAgent } from "./crypto-agent.js";
 import { SharePasteGrpcClient } from "./grpc-client.js";
-import { HistoryStore } from "./history-store.js";
 import { IncomingItemStore } from "./incoming-item-store.js";
-import { defaultPolicy } from "./policy-engine.js";
 import { StateStore, type PersistedState } from "./state-store.js";
-import { SyncEngine } from "./sync-engine.js";
 
 export interface SharePasteClientOptions {
   grpcAddress: string;
