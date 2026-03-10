@@ -185,7 +185,7 @@ actor SharePasteBridge {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
 
-        process.arguments = ["npm", "run", "--silent", "-w", "client", "dev", "--"]
+        process.arguments = ["npm", "run", "--silent", "-w", "@sharepaste/client", "dev", "--"]
             + globalClientArgs(options: options)
             + ["run"]
 
@@ -227,7 +227,7 @@ actor SharePasteBridge {
         process.standardOutput = stdout
         process.standardError = stderr
 
-        process.arguments = ["npm", "run", "--silent", "-w", "client", "dev", "--"]
+        process.arguments = ["npm", "run", "--silent", "-w", "@sharepaste/client", "dev", "--"]
             + globalClientArgs(options: options)
             + ["--json", subcommand]
             + subArgs

@@ -8,10 +8,10 @@
     "sharepaste-client": "dist/src/cli.js"
   },
   "scripts": {
-    "dev": "node ../node_modules/tsx/dist/cli.mjs src/cli.ts",
-    "build": "node ../node_modules/typescript/bin/tsc -p tsconfig.json",
-    "test": "node ../node_modules/vitest/vitest.mjs run",
-    "lint": "node ../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
+    "dev": "node ../../node_modules/tsx/dist/cli.mjs src/cli.ts",
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "lint": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.1",

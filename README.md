@@ -4,9 +4,13 @@ SharePaste is a cross-platform clipboard sharing system with an anonymous device
 
 This repository ships:
 
-- `server/`: gRPC relay/control service (headless)
-- `client/`: cross-platform client core + CLI runtime (Windows/macOS/Linux)
-- `macos/`: native macOS status-bar app (SwiftUI)
+- `apps/server/`: gRPC relay/control service (headless)
+- `apps/client-cli/`: cross-platform client core + CLI runtime (Windows/macOS/Linux)
+- `apps/desktop-macos/`: native macOS status-bar app (SwiftUI)
+- `apps/desktop-windows/`: planned Windows desktop shell
+- `apps/desktop-linux/`: planned Linux desktop shell
+- `apps/mobile-android/`: planned Android client
+- `packages/proto/`: shared gRPC contract
 
 ## Implemented v1 capabilities
 
@@ -23,14 +27,16 @@ This repository ships:
 
 ## Project layout
 
-- `/proto/sharepaste.proto`: shared gRPC contract
-- `/server/src`: gRPC server + in-memory domain store
-- `/client/src`: client core modules
+- `/apps/server/src`: gRPC server + in-memory domain store
+- `/apps/client-cli/src`: client core modules
   - `adapters/clipboard-watcher.ts`
   - `adapters/lan-discovery.ts`
   - `core/sync-engine.ts`
   - `core/crypto-agent.ts`
   - `core/sharepaste-client.ts`
+- `/apps/desktop-macos/Sources`: native macOS shell
+- `/packages/proto/sharepaste.proto`: shared protocol schema
+- `/docs/architecture/repo-structure.md`: repo layout and ownership guide
 
 ## Development preparation docs
 
@@ -50,32 +56,32 @@ This repository ships:
 
 ```bash
 npm install
-npm run -w server dev
+npm run server:dev
 # in another terminal
-npm run -w client dev -- init --name my-laptop
-npm run -w client dev -- run
+npm run client:dev -- init --name my-laptop
+npm run client:dev -- run
 ```
 
 Durable backend mode (Postgres + Redis):
 
 ```bash
 docker compose up -d postgres redis
-SHAREPASTE_STORAGE_MODE=durable npm run -w server dev
+SHAREPASTE_STORAGE_MODE=durable npm run server:dev
 ```
 
 Useful CLI commands:
 
 ```bash
-npm run -w client dev -- devices
-npm run -w client dev -- remove-device --target-device-id dev_xxx
-npm run -w client dev -- bind-code
-npm run -w client dev -- bind-request --code 123456
-npm run -w client dev -- bind-confirm --request-id req_xxx --approve
-npm run -w client dev -- recover --phrase <recovery_phrase> --name my-new-device
-npm run -w client dev -- policy --allow-text true --allow-image true --allow-file true --max-file-size 3145728
-npm run -w client dev -- send-text --value "hello from sharepaste"
-npm run -w client dev -- send-file --path ./small.zip
-npm run -w client dev -- send-image --path ./image.png
+npm run client:dev -- devices
+npm run client:dev -- remove-device --target-device-id dev_xxx
+npm run client:dev -- bind-code
+npm run client:dev -- bind-request --code 123456
+npm run client:dev -- bind-confirm --request-id req_xxx --approve
+npm run client:dev -- recover --phrase <recovery_phrase> --name my-new-device
+npm run client:dev -- policy --allow-text true --allow-image true --allow-file true --max-file-size 3145728
+npm run client:dev -- send-text --value "hello from sharepaste"
+npm run client:dev -- send-file --path ./small.zip
+npm run client:dev -- send-image --path ./image.png
 ```
 
 ## Tests
@@ -88,7 +94,7 @@ Run storage integration tests (requires local Postgres + Redis):
 
 ```bash
 docker compose up -d postgres redis
-SHAREPASTE_INTEGRATION=1 SHAREPASTE_STORAGE_MODE=durable npm run -w server test
+SHAREPASTE_INTEGRATION=1 SHAREPASTE_STORAGE_MODE=durable npm run server:test
 ```
 
 Current tests cover binding, policy conflicts, offline TTL handling, dedup/loop suppression, ring-buffer history, and cryptographic envelope round trips.

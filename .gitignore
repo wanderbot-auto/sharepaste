@@ -6,6 +6,6 @@ coverage/
 *.log
 .DS_Store
 .env
-macos/.build/
-macos/.swiftpm/
+apps/desktop-macos/.build/
+apps/desktop-macos/.swiftpm/
 .sharepaste-dev/

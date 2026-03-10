@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "scripts": {
-    "dev": "node ../node_modules/tsx/dist/cli.mjs src/index.ts",
-    "build": "node ../node_modules/typescript/bin/tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "test": "node ../node_modules/vitest/vitest.mjs run",
-    "lint": "node ../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
+    "dev": "node ../../node_modules/tsx/dist/cli.mjs src/index.ts",
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "lint": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.1",

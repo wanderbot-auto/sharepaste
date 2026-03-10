@@ -31,12 +31,12 @@ jobs:
         run: npm ci
 
       - name: Build native macOS desktop binary
-        run: swift build --package-path macos -c release
+        run: swift build --package-path apps/desktop-macos -c release
 
       - name: Pack release artifact
         run: |
           mkdir -p release-assets
-          cp macos/.build/release/sharepaste-desktop release-assets/sharepaste-desktop
+          cp apps/desktop-macos/.build/release/sharepaste-desktop release-assets/sharepaste-desktop
           tar -czf release-assets/sharepaste-desktop-macos.tar.gz -C release-assets sharepaste-desktop
 
       - name: Upload packaged artifact

@@ -35,7 +35,7 @@ Current server implementation is in-memory store. v0.1 implementation must move 
 - ratelimit:{device_id}:{action} -> rolling counter
 
 ## 4. API and Contract Rules
-- Canonical API contract: `proto/sharepaste.proto`.
+- Canonical API contract: `packages/proto/sharepaste.proto`.
 - Compatibility rule: additive changes only.
 - No renaming or semantic repurposing of existing fields in v1.
 - Error semantics must remain stable across retries and reconnects.

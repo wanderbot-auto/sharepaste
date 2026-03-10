@@ -3,14 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
-    "server",
-    "client"
+    "apps/server",
+    "apps/client-cli"
   ],
   "scripts": {
-    "build": "npm run -w server build && npm run -w client build",
-    "test": "npm run -w server test && npm run -w client test",
-    "lint": "npm run -w server lint && npm run -w client lint",
-    "desktop:macos:dev": "swift run --package-path macos sharepaste-desktop",
-    "desktop:macos:build": "swift build --package-path macos -c release"
+    "build": "npm run server:build && npm run client:build",
+    "test": "npm run server:test && npm run client:test",
+    "lint": "npm run server:lint && npm run client:lint",
+    "server:dev": "npm run -w @sharepaste/server dev",
+    "server:build": "npm run -w @sharepaste/server build",
+    "server:test": "npm run -w @sharepaste/server test",
+    "server:lint": "npm run -w @sharepaste/server lint",
+    "client:dev": "npm run -w @sharepaste/client dev",
+    "client:build": "npm run -w @sharepaste/client build",
+    "client:test": "npm run -w @sharepaste/client test",
+    "client:lint": "npm run -w @sharepaste/client lint",
+    "desktop:macos:dev": "swift run --package-path apps/desktop-macos sharepaste-desktop",
+    "desktop:macos:build": "swift build --package-path apps/desktop-macos -c release"
   }
 }

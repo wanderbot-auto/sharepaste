@@ -9,8 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const protoCandidates = [
-  path.resolve(__dirname, "../../../proto/sharepaste.proto"),
-  path.resolve(__dirname, "../../../../proto/sharepaste.proto")
+  path.resolve(__dirname, "../../../../packages/proto/sharepaste.proto"),
+  path.resolve(__dirname, "../../../../../packages/proto/sharepaste.proto")
 ];
 
 const protoPath = protoCandidates.find((candidate) => existsSync(candidate));

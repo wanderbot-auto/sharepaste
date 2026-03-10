@@ -19,14 +19,14 @@
   - `docs/ops/incident-runbook.md`
   - `docs/ops/release-checklist.md`
 - 当前实现：
-  - `proto/sharepaste.proto`
-  - `server/src/**`
-  - `client/src/**`
-  - `macos/Sources/main.swift`
+  - `packages/proto/sharepaste.proto`
+  - `apps/server/src/**`
+  - `apps/client-cli/src/**`
+  - `apps/desktop-macos/Sources/main.swift`
 
 ## 3. 当前方案总览
 SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装 + 桌面壳层”的三层方案：
-- 协议层：统一使用 gRPC + `proto/sharepaste.proto`。
+- 协议层：统一使用 gRPC + `packages/proto/sharepaste.proto`。
 - 服务层：`DeviceService`、`PairingService`、`PolicyService`、`SyncService` 四类服务。
 - 客户端层：CLI/Core 负责设备身份、策略校验、加密封装、同步引擎。
 - 桌面层：macOS SwiftUI 原生实现，调用本地命令桥，底层复用 CLI 能力。
@@ -60,9 +60,9 @@ SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装
   - 先 `fetchOffline` 再开启事件流
   - 断线后 2s 重连循环
 
-### 4.3 Desktop（`macos`）
+### 4.3 Desktop（`apps/desktop-macos`）
 - 前端：SwiftUI 管理连接、设备、策略、绑定、发送等操作。
-- 命令桥：通过 `npm run -w client dev -- ...` 调 CLI 子命令，`start_sync` 以子进程方式托管。
+- 命令桥：通过 `npm run -w @sharepaste/client dev -- ...` 调 CLI 子命令，`start_sync` 以子进程方式托管。
 - 当前定位：功能壳层，复用核心能力，便于快速覆盖桌面路径。
 
 ## 5. 关键流程设计（现状）
