@@ -6,6 +6,7 @@ option go_package = "sharepaste/proto/sharepaste/v1;sharepastev1";
 
 service DeviceService {
   rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+  rpc GetDeviceContext(GetDeviceContextRequest) returns (GetDeviceContextResponse);
   rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
   rpc RenameDevice(RenameDeviceRequest) returns (RenameDeviceResponse);
   rpc RemoveDevice(RemoveDeviceRequest) returns (RemoveDeviceResponse);
@@ -85,6 +86,17 @@ message RegisterDeviceResponse {
   string sealed_group_key = 5;
 }
 
+message GetDeviceContextRequest {
+  string device_id = 1;
+}
+
+message GetDeviceContextResponse {
+  Device device = 1;
+  string group_id = 2;
+  string sealed_group_key = 3;
+  int64 group_key_version = 4;
+}
+
 message ListDevicesRequest {
   string device_id = 1;
 }
@@ -155,6 +167,7 @@ message ConfirmBindResponse {
   bool approved = 1;
   string group_id = 2;
   string sealed_group_key = 3;
+  int64 group_key_version = 4;
 }
 
 message GetPolicyRequest {
@@ -190,6 +203,7 @@ message EventStreamServerMessage {
     EventStreamConnected connected = 1;
     EventStreamClipboard clipboard = 2;
     EventStreamPairingRequest pairing_request = 3;
+    EventStreamGroupKeyUpdate group_key_update = 4;
   }
 }
 
@@ -214,6 +228,12 @@ message EventStreamPairingRequest {
   string requester_platform = 4;
   int64 requested_at_unix = 5;
   int64 expires_at_unix = 6;
+}
+
+message EventStreamGroupKeyUpdate {
+  string group_id = 1;
+  string sealed_group_key = 2;
+  int64 group_key_version = 3;
 }
 
 message EventStreamAck {

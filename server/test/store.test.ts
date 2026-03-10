@@ -1,5 +1,8 @@
+import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SharePasteStore } from "../src/store/sharepaste-store.js";
+
+const makePubkey = (): string => generateKeyPairSync("x25519").publicKey.export({ type: "spki", format: "pem" }).toString();
 
 describe("SharePasteStore", () => {
   beforeEach(() => {
@@ -12,7 +15,7 @@ describe("SharePasteStore", () => {
     const registration = store.registerDevice({
       deviceName: "Laptop",
       platform: "windows",
-      pubkey: "pub_1"
+      pubkey: makePubkey()
     });
 
     expect(registration.createdNewGroup).toBe(true);
@@ -24,8 +27,8 @@ describe("SharePasteStore", () => {
   it("pairs devices with expiring bind code and confirmation", () => {
     const store = new SharePasteStore();
 
-    const issuer = store.registerDevice({ deviceName: "A", platform: "windows", pubkey: "pubA" });
-    const requester = store.registerDevice({ deviceName: "B", platform: "linux", pubkey: "pubB" });
+    const issuer = store.registerDevice({ deviceName: "A", platform: "windows", pubkey: makePubkey() });
+    const requester = store.registerDevice({ deviceName: "B", platform: "linux", pubkey: makePubkey() });
 
     const code = store.createBindCode(issuer.device.deviceId);
     const request = store.requestBind(code.code, requester.device.deviceId);
@@ -44,7 +47,7 @@ describe("SharePasteStore", () => {
 
   it("enforces optimistic lock for policy updates", () => {
     const store = new SharePasteStore();
-    const device = store.registerDevice({ deviceName: "A", platform: "macos", pubkey: "pubA" });
+    const device = store.registerDevice({ deviceName: "A", platform: "macos", pubkey: makePubkey() });
 
     const current = store.getPolicy(device.device.deviceId);
     const next = store.updatePolicy(device.device.deviceId, current.version, {
@@ -69,8 +72,8 @@ describe("SharePasteStore", () => {
   it("queues offline items and drops expired entries", () => {
     const store = new SharePasteStore();
 
-    const sender = store.registerDevice({ deviceName: "Sender", platform: "windows", pubkey: "pubS" });
-    const receiver = store.registerDevice({ deviceName: "Receiver", platform: "linux", pubkey: "pubR" });
+    const sender = store.registerDevice({ deviceName: "Sender", platform: "windows", pubkey: makePubkey() });
+    const receiver = store.registerDevice({ deviceName: "Receiver", platform: "linux", pubkey: makePubkey() });
 
     const bindCode = store.createBindCode(sender.device.deviceId);
     const bindReq = store.requestBind(bindCode.code, receiver.device.deviceId);
@@ -96,7 +99,7 @@ describe("SharePasteStore", () => {
 
   it("rejects files that violate policy max size", () => {
     const store = new SharePasteStore();
-    const sender = store.registerDevice({ deviceName: "Sender", platform: "windows", pubkey: "pubS" });
+    const sender = store.registerDevice({ deviceName: "Sender", platform: "windows", pubkey: makePubkey() });
 
     const current = store.getPolicy(sender.device.deviceId);
     store.updatePolicy(sender.device.deviceId, current.version, {

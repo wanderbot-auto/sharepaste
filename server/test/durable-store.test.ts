@@ -1,6 +1,9 @@
+import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryStatePersistence, NoopRuntimeSignals } from "../src/infrastructure/noop.js";
 import { DurableSharePasteStore } from "../src/store/durable-sharepaste-store.js";
+
+const makePubkey = (): string => generateKeyPairSync("x25519").publicKey.export({ type: "spki", format: "pem" }).toString();
 
 describe("DurableSharePasteStore", () => {
   beforeEach(() => {
@@ -16,13 +19,13 @@ describe("DurableSharePasteStore", () => {
     const owner = await first.registerDevice({
       deviceName: "Owner",
       platform: "macos",
-      pubkey: "pub_owner"
+      pubkey: makePubkey()
     });
 
     const joiner = await first.registerDevice({
       deviceName: "Joiner",
       platform: "windows",
-      pubkey: "pub_joiner"
+      pubkey: makePubkey()
     });
 
     const bindCode = await first.createBindCode(owner.device.deviceId);

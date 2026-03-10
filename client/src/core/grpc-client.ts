@@ -73,6 +73,19 @@ export interface RecoverGroupResult {
   sealedGroupKey: string;
 }
 
+export interface DeviceContextResult {
+  device: {
+    deviceId: string;
+    groupId: string;
+    pubkey: string;
+    name: string;
+    platform: string;
+  };
+  groupId: string;
+  sealedGroupKey: string;
+  groupKeyVersion: number;
+}
+
 export class SharePasteGrpcClient {
   private readonly deviceClient: any;
 
@@ -99,6 +112,18 @@ export class SharePasteGrpcClient {
   }): Promise<RegisterDeviceResult> {
     return new Promise((resolve, reject) => {
       this.deviceClient.RegisterDevice(input, (err: Error | null, response: RegisterDeviceResult) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  getDeviceContext(deviceId: string): Promise<DeviceContextResult> {
+    return new Promise((resolve, reject) => {
+      this.deviceClient.GetDeviceContext({ deviceId }, (err: Error | null, response: DeviceContextResult) => {
         if (err) {
           reject(err);
           return;
@@ -168,7 +193,11 @@ export class SharePasteGrpcClient {
     });
   }
 
-  confirmBind(requestId: string, issuerDeviceId: string, approve: boolean): Promise<{ approved: boolean; groupId: string }> {
+  confirmBind(
+    requestId: string,
+    issuerDeviceId: string,
+    approve: boolean
+  ): Promise<{ approved: boolean; groupId: string; sealedGroupKey: string; groupKeyVersion: number }> {
     return new Promise((resolve, reject) => {
       this.pairingClient.ConfirmBind({ requestId, issuerDeviceId, approve }, (err: Error | null, response: any) => {
         if (err) {

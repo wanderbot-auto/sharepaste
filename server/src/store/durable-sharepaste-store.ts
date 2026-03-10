@@ -1,4 +1,4 @@
-import type { ClipboardItem, Device, Policy } from "../types.js";
+import type { ClipboardItem, Device, DeviceContext, Policy } from "../types.js";
 import { nowUnix } from "../utils/ids.js";
 import type { SharePasteStoreApi, SharePasteRuntimeSignals, SharePasteStatePersistence } from "./contracts.js";
 import { SharePasteStore, type PresenceEvent, type RegisterDeviceInput, type RegisterDeviceResult } from "./sharepaste-store.js";
@@ -51,6 +51,10 @@ export class DurableSharePasteStore implements SharePasteStoreApi {
 
   async recoverGroup(input: Omit<RegisterDeviceInput, "groupId"> & { recoveryPhrase: string }): Promise<RegisterDeviceResult> {
     return this.withPersist("recover_group", () => this.inner.recoverGroup(input));
+  }
+
+  async getDeviceContext(deviceId: string): Promise<DeviceContext> {
+    return this.inner.getDeviceContext(deviceId);
   }
 
   async listDevices(deviceId: string): Promise<Device[]> {

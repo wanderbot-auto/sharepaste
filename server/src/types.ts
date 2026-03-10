@@ -26,6 +26,14 @@ export interface BindRequest {
   approved?: boolean;
   groupId?: string;
   sealedGroupKey?: string;
+  groupKeyVersion?: number;
+}
+
+export interface DeviceContext {
+  device: Device;
+  groupId: string;
+  sealedGroupKey: string;
+  groupKeyVersion: number;
 }
 
 export interface Policy {

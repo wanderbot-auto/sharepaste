@@ -122,6 +122,18 @@ export const createHandlers = (store: SharePasteStoreApi) => {
       });
     },
 
+    GetDeviceContext: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
+      void runUnary(callback, async () => {
+        const context = await store.getDeviceContext(call.request.deviceId);
+        return {
+          device: context.device,
+          groupId: context.groupId,
+          sealedGroupKey: context.sealedGroupKey,
+          groupKeyVersion: context.groupKeyVersion
+        };
+      });
+    },
+
     ListDevices: (call: ServerUnaryCall<any, any>, callback: sendUnaryData<any>): void => {
       void runUnary(callback, async () => {
         const devices = await store.listDevices(call.request.deviceId);
@@ -192,7 +204,8 @@ export const createHandlers = (store: SharePasteStoreApi) => {
         return {
           approved: Boolean(confirmation.approved),
           groupId: confirmation.groupId ?? "",
-          sealedGroupKey: confirmation.sealedGroupKey ?? ""
+          sealedGroupKey: confirmation.sealedGroupKey ?? "",
+          groupKeyVersion: Number(confirmation.groupKeyVersion ?? 0)
         };
       });
     }
@@ -240,6 +253,11 @@ export const createHandlers = (store: SharePasteStoreApi) => {
                     preferredLanTargets: []
                   }
                 });
+                return;
+              }
+
+              if (event.type === "group_key_update") {
+                call.write({ groupKeyUpdate: event.payload });
                 return;
               }
 

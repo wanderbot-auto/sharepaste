@@ -1,4 +1,4 @@
-import type { AuditRecord, BindCode, BindRequest, ClipboardItem, Device, Policy, SharePasteSnapshot } from "../types.js";
+import type { AuditRecord, BindCode, BindRequest, ClipboardItem, Device, DeviceContext, Policy, SharePasteSnapshot } from "../types.js";
 import type { PresenceEvent, RegisterDeviceInput, RegisterDeviceResult } from "./sharepaste-store.js";
 
 export interface SharePasteStatePersistence {
@@ -18,6 +18,7 @@ export interface SharePasteRuntimeSignals {
 export interface SharePasteStoreApi {
   registerDevice(input: RegisterDeviceInput): Promise<RegisterDeviceResult> | RegisterDeviceResult;
   recoverGroup(input: Omit<RegisterDeviceInput, "groupId"> & { recoveryPhrase: string }): Promise<RegisterDeviceResult> | RegisterDeviceResult;
+  getDeviceContext(deviceId: string): Promise<DeviceContext> | DeviceContext;
   listDevices(deviceId: string): Promise<Device[]> | Device[];
   renameDevice(deviceId: string, newName: string): Promise<Device> | Device;
   removeDevice(requestDeviceId: string, targetDeviceId: string): Promise<boolean> | boolean;

@@ -1,5 +1,5 @@
 import { customAlphabet, nanoid } from "nanoid";
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, createPublicKey, diffieHellman, generateKeyPairSync, randomBytes } from "node:crypto";
 
 const bindCodeAlphabet = customAlphabet("0123456789", 6);
 
@@ -24,5 +24,22 @@ export const generateRecoveryPhrase = (): string => {
 export const generateGroupKeyBase64 = (): string => randomBytes(32).toString("base64url");
 
 export const sealGroupKeyForDevice = (groupId: string, pubkey: string, version: number, groupKeyBase64: string): string => {
-  return Buffer.from(JSON.stringify({ groupId, pubkey, version, groupKeyBase64 })).toString("base64url");
+  const ephemeral = generateKeyPairSync("x25519");
+  const sharedSecret = diffieHellman({
+    privateKey: ephemeral.privateKey,
+    publicKey: createPublicKey(pubkey)
+  });
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", sharedSecret.subarray(0, 32), nonce);
+  const ciphertext = Buffer.concat([cipher.update(Buffer.from(groupKeyBase64, "base64url")), cipher.final(), cipher.getAuthTag()]);
+
+  return Buffer.from(
+    JSON.stringify({
+      groupId,
+      version,
+      epk: ephemeral.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      nonce: nonce.toString("base64url"),
+      ciphertext: ciphertext.toString("base64url")
+    })
+  ).toString("base64url");
 };

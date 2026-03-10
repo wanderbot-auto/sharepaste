@@ -7,6 +7,7 @@ import type { ClipboardPayload } from "../types.js";
 import { CryptoAgent } from "./crypto-agent.js";
 import { SharePasteGrpcClient } from "./grpc-client.js";
 import { HistoryStore } from "./history-store.js";
+import { IncomingItemStore } from "./incoming-item-store.js";
 import { defaultPolicy } from "./policy-engine.js";
 import { StateStore, type PersistedState } from "./state-store.js";
 import { SyncEngine } from "./sync-engine.js";
@@ -27,6 +28,8 @@ export class SharePasteClient {
 
   private readonly history = new HistoryStore(50);
 
+  private readonly incomingItems = new IncomingItemStore();
+
   private state: PersistedState | null = null;
 
   private syncEngine: SyncEngine | null = null;
@@ -45,12 +48,24 @@ export class SharePasteClient {
   async bootstrap(deviceName: string): Promise<PersistedState> {
     const existing = await this.stateStore.load();
     if (existing) {
-      this.state = existing;
-      this.syncEngine = new SyncEngine(existing.deviceId);
-      return existing;
+      const refreshed = await this.refreshPersistedState(existing);
+      this.state = refreshed;
+      this.syncEngine = new SyncEngine(refreshed.deviceId);
+      return refreshed;
     }
 
     const identity = this.crypto.createIdentity();
+    const stateSeed: PersistedState = {
+      deviceId: "",
+      groupId: "",
+      deviceName,
+      platform: os.platform(),
+      recoveryPhrase: "",
+      sealedGroupKey: "",
+      identity
+    };
+
+    this.state = stateSeed;
     const registration = await this.grpc.registerDevice({
       deviceName,
       platform: os.platform(),
@@ -58,7 +73,6 @@ export class SharePasteClient {
     });
 
     const groupKey = this.extractGroupKey(registration.sealedGroupKey);
-
     const state: PersistedState = {
       deviceId: registration.device.deviceId,
       groupId: registration.groupId,
@@ -67,7 +81,8 @@ export class SharePasteClient {
       recoveryPhrase: registration.recoveryPhrase,
       sealedGroupKey: registration.sealedGroupKey,
       identity,
-      groupKeyBase64: Buffer.from(groupKey).toString("base64url")
+      groupKeyBase64: Buffer.from(groupKey).toString("base64url"),
+      groupKeyVersion: 1
     };
 
     await this.stateStore.save(state);
@@ -95,7 +110,15 @@ export class SharePasteClient {
 
   async confirmBind(requestId: string, approve: boolean): Promise<{ approved: boolean; groupId: string }> {
     const state = this.requireState();
-    return this.grpc.confirmBind(requestId, state.deviceId, approve);
+    const result = await this.grpc.confirmBind(requestId, state.deviceId, approve);
+    if (result.approved) {
+      await this.applyGroupKeyUpdate({
+        groupId: result.groupId,
+        sealedGroupKey: result.sealedGroupKey,
+        groupKeyVersion: result.groupKeyVersion
+      });
+    }
+    return { approved: result.approved, groupId: result.groupId };
   }
 
   async listDevices(): Promise<Array<{ deviceId: string; name: string; platform: string; groupId: string }>> {
@@ -110,6 +133,17 @@ export class SharePasteClient {
 
   async recoverGroup(recoveryPhrase: string, deviceName: string): Promise<PersistedState> {
     const identity = this.crypto.createIdentity();
+    const stateSeed: PersistedState = {
+      deviceId: "",
+      groupId: "",
+      deviceName,
+      platform: os.platform(),
+      recoveryPhrase,
+      sealedGroupKey: "",
+      identity
+    };
+
+    this.state = stateSeed;
     const registration = await this.grpc.recoverGroup({
       recoveryPhrase,
       deviceName,
@@ -126,7 +160,8 @@ export class SharePasteClient {
       recoveryPhrase,
       sealedGroupKey: registration.sealedGroupKey,
       identity,
-      groupKeyBase64: Buffer.from(groupKey).toString("base64url")
+      groupKeyBase64: Buffer.from(groupKey).toString("base64url"),
+      groupKeyVersion: 1
     };
 
     await this.stateStore.save(state);
@@ -164,20 +199,18 @@ export class SharePasteClient {
       return;
     }
 
-    const state = this.requireState();
-    const policy = await this.grpc.getPolicy(state.deviceId).catch(() => defaultPolicy());
-    const groupKey = this.getGroupKey();
+    const state = await this.refreshCurrentStateFromServer();
 
     await this.syncOffline();
 
     await this.clipboard.start(async (change) => {
       if (change.kind === "text") {
-        await this.sendText(change.value, policy);
+        await this.sendText(change.value);
       }
     });
 
     this.realtimeStopRequested = false;
-    this.realtimeLoop = this.runRealtimeLoop(state.deviceId, groupKey);
+    this.realtimeLoop = this.runRealtimeLoop(state.deviceId);
   }
 
   async stopRealtime(): Promise<void> {
@@ -216,13 +249,18 @@ export class SharePasteClient {
 
     this.history.push(item);
 
+    const plaintext = this.crypto.decryptClipboard(groupKey, {
+      ciphertext: item.ciphertext,
+      nonce: item.nonce
+    });
+
     if (item.type === "text") {
-      const plaintext = this.crypto.decryptClipboard(groupKey, {
-        ciphertext: item.ciphertext,
-        nonce: item.nonce
-      });
       await this.clipboard.writeText(Buffer.from(plaintext).toString("utf8"));
+      return;
     }
+
+    const savedPath = await this.incomingItems.materialize(item, plaintext);
+    console.log(`saved ${item.type} payload to ${savedPath}`);
   }
 
   private async sendPayload(
@@ -253,9 +291,12 @@ export class SharePasteClient {
     if (!decision.accepted) {
       return false;
     }
-    this.history.push(payload);
-    await this.grpc.pushClipboardItem(deviceId, payload);
-    return true;
+
+    const accepted = await this.grpc.pushClipboardItem(deviceId, payload);
+    if (accepted) {
+      this.history.push(payload);
+    }
+    return accepted;
   }
 
   private getGroupKey(): Uint8Array {
@@ -268,14 +309,25 @@ export class SharePasteClient {
 
   private extractGroupKey(sealedGroupKey: string): Uint8Array {
     try {
-      const parsed = JSON.parse(Buffer.from(sealedGroupKey, "base64url").toString("utf8")) as { groupKeyBase64?: string };
+      const parsed = JSON.parse(Buffer.from(sealedGroupKey, "base64url").toString("utf8")) as {
+        groupKeyBase64?: string;
+        epk?: string;
+        nonce?: string;
+        ciphertext?: string;
+      };
+      if (parsed.epk && parsed.nonce && parsed.ciphertext) {
+        if (!this.state) {
+          throw new Error("CLIENT_NOT_BOOTSTRAPPED");
+        }
+        return this.crypto.unsealGroupKeyForDevice(sealedGroupKey, this.state.identity.wrapPrivateKey);
+      }
       if (parsed.groupKeyBase64) {
         return Buffer.from(parsed.groupKeyBase64, "base64url");
       }
-    } catch {
-      // fallback below
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : "INVALID_SEALED_GROUP_KEY");
     }
-    return this.crypto.generateGroupKey();
+    throw new Error("INVALID_SEALED_GROUP_KEY");
   }
 
   private fromServerClipboard(item: any): ClipboardPayload {
@@ -295,9 +347,9 @@ export class SharePasteClient {
     };
   }
 
-  private async runRealtimeLoop(deviceId: string, groupKey: Uint8Array): Promise<void> {
+  private async runRealtimeLoop(deviceId: string): Promise<void> {
     while (!this.realtimeStopRequested) {
-      await this.connectOnce(deviceId, groupKey);
+      await this.connectOnce(deviceId);
       if (!this.realtimeStopRequested) {
         await new Promise((resolve) => {
           setTimeout(resolve, 2000);
@@ -306,7 +358,7 @@ export class SharePasteClient {
     }
   }
 
-  private async connectOnce(deviceId: string, groupKey: Uint8Array): Promise<void> {
+  private async connectOnce(deviceId: string): Promise<void> {
     await new Promise<void>((resolve) => {
       const stream = this.grpc.openEventStream(deviceId, undefined);
       this.realtimeStream = stream;
@@ -323,18 +375,31 @@ export class SharePasteClient {
         resolve();
       };
 
-      stream.on("data", async (message: any) => {
-        if (message.clipboard?.item) {
-          const item = this.fromServerClipboard(message.clipboard.item);
-          await this.applyIncoming(item, groupKey);
-          await this.grpc.ackItem(deviceId, item.itemId);
-        }
+      stream.on("data", (message: any) => {
+        void (async () => {
+          if (message.groupKeyUpdate) {
+            await this.applyGroupKeyUpdate({
+              groupId: message.groupKeyUpdate.groupId,
+              sealedGroupKey: message.groupKeyUpdate.sealedGroupKey,
+              groupKeyVersion: Number(message.groupKeyUpdate.groupKeyVersion)
+            });
+          }
 
-        if (message.pairingRequest) {
-          console.log(
-            `pair request from ${message.pairingRequest.requesterName} (${message.pairingRequest.requesterPlatform}), request_id=${message.pairingRequest.requestId}`
-          );
-        }
+          if (message.clipboard?.item) {
+            const item = this.fromServerClipboard(message.clipboard.item);
+            await this.applyIncoming(item, this.getGroupKey());
+            await this.grpc.ackItem(deviceId, item.itemId);
+          }
+
+          if (message.pairingRequest) {
+            console.log(
+              `pair request from ${message.pairingRequest.requesterName} (${message.pairingRequest.requesterPlatform}), request_id=${message.pairingRequest.requestId}`
+            );
+          }
+        })().catch((error: unknown) => {
+          console.error("realtime stream processing failed", error);
+          cleanup();
+        });
       });
 
       stream.on("error", () => {
@@ -349,5 +414,57 @@ export class SharePasteClient {
         cleanup();
       });
     });
+  }
+
+  private async refreshCurrentStateFromServer(): Promise<PersistedState> {
+    const current = this.requireState();
+    const refreshed = await this.refreshPersistedState(current);
+    this.state = refreshed;
+    return refreshed;
+  }
+
+  private async refreshPersistedState(existing: PersistedState): Promise<PersistedState> {
+    try {
+      this.state = existing;
+      const context = await this.grpc.getDeviceContext(existing.deviceId);
+      return this.applyGroupKeyUpdate(
+        {
+          groupId: context.groupId,
+          sealedGroupKey: context.sealedGroupKey,
+          groupKeyVersion: Number(context.groupKeyVersion)
+        },
+        {
+          ...existing,
+          deviceName: context.device.name,
+          platform: context.device.platform,
+          groupId: context.groupId
+        }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (message.includes("device not found")) {
+        throw new Error("STALE_DEVICE_STATE");
+      }
+      throw error;
+    }
+  }
+
+  private async applyGroupKeyUpdate(
+    update: { groupId: string; sealedGroupKey: string; groupKeyVersion: number },
+    baseState?: PersistedState
+  ): Promise<PersistedState> {
+    const current = baseState ?? this.requireState();
+    this.state = current;
+    const groupKey = this.extractGroupKey(update.sealedGroupKey);
+    const next: PersistedState = {
+      ...current,
+      groupId: update.groupId,
+      sealedGroupKey: update.sealedGroupKey,
+      groupKeyBase64: Buffer.from(groupKey).toString("base64url"),
+      groupKeyVersion: update.groupKeyVersion
+    };
+    await this.stateStore.save(next);
+    this.state = next;
+    return next;
   }
 }

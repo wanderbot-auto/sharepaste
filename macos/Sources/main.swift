@@ -36,7 +36,6 @@ struct SharePolicy: Codable {
     let allowFile: Bool
     let maxFileSizeBytes: Int
     let version: Int
-    let allowEncryption: Bool? // Optional to support older clients/servers
 }
 
 struct SyncStatus: Codable {
@@ -123,7 +122,6 @@ actor SharePasteBridge {
         allowText: Bool,
         allowImage: Bool,
         allowFile: Bool,
-        allowEncryption: Bool,
         maxFileSizeBytes: Int
     ) async throws -> SharePolicy {
         return try await runClientJSON(
@@ -133,7 +131,6 @@ actor SharePasteBridge {
                 "--allow-text", String(allowText),
                 "--allow-image", String(allowImage),
                 "--allow-file", String(allowFile),
-                "--allow-encryption", String(allowEncryption),
                 "--max-file-size", String(maxFileSizeBytes)
             ],
             as: SharePolicy.self
@@ -394,7 +391,6 @@ final class AppViewModel: ObservableObject {
     @Published var policyAllowText = true
     @Published var policyAllowImage = true
     @Published var policyAllowFile = true
-    @Published var policyAllowEncryption = true
     @Published var policyMaxFileSizeBytes = 3 * 1024 * 1024
     @Published var policyMaxFileSizeMB = 3
 
@@ -675,7 +671,6 @@ final class AppViewModel: ObservableObject {
             self.policyAllowText = policy.allowText
             self.policyAllowImage = policy.allowImage
             self.policyAllowFile = policy.allowFile
-            self.policyAllowEncryption = policy.allowEncryption ?? true
             self.policyMaxFileSizeBytes = policy.maxFileSizeBytes
             self.policyMaxFileSizeMB = Self.bytesToMB(policy.maxFileSizeBytes)
             self.policyVersion = policy.version
@@ -696,13 +691,11 @@ final class AppViewModel: ObservableObject {
                 allowText: self.policyAllowText,
                 allowImage: self.policyAllowImage,
                 allowFile: self.policyAllowFile,
-                allowEncryption: self.policyAllowEncryption,
                 maxFileSizeBytes: maxFileSizeBytes
             )
             self.policyAllowText = next.allowText
             self.policyAllowImage = next.allowImage
             self.policyAllowFile = next.allowFile
-            self.policyAllowEncryption = next.allowEncryption ?? true
             self.policyMaxFileSizeBytes = next.maxFileSizeBytes
             self.policyMaxFileSizeMB = Self.bytesToMB(next.maxFileSizeBytes)
             self.policyVersion = next.version
@@ -881,6 +874,12 @@ final class AppViewModel: ObservableObject {
         
         if lower.contains("device not found") {
             return ("设备状态异常", "本地设备状态与服务器不一致，请点击“保存并初始化”或“恢复群组”")
+        }
+        if lower.contains("state_file_invalid") {
+            return ("本地状态损坏", "检测到本地状态文件无效，请点击“保存并初始化”或“恢复群组”")
+        }
+        if lower.contains("stale device state") {
+            return ("设备状态异常", "检测到本地设备状态已过期，请点击“保存并初始化”或“恢复群组”")
         }
         if lower.contains("unavailable") || lower.contains("failed to connect") {
             return ("连接失败", "无法连接到服务器，请检查服务器地址是否正确以及服务器是否运行中")
@@ -1494,10 +1493,7 @@ struct ContentView: View {
                         HStack(spacing: Spacing.m) {
                             policyToggle(icon: "text.alignleft", label: "Text", isOn: $vm.policyAllowText)
                             policyToggle(icon: "photo", label: "Image", isOn: $vm.policyAllowImage)
-                        }
-                        HStack(spacing: Spacing.m) {
                             policyToggle(icon: "doc", label: "File", isOn: $vm.policyAllowFile)
-                            policyToggle(icon: "lock.shield", label: "Encryption", isOn: $vm.policyAllowEncryption)
                         }
                     }
                     

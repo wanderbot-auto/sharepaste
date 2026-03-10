@@ -1,4 +1,4 @@
-import type { BindCode, BindRequest, ClipboardItem, Device, GroupState, OfflineEnvelope, Policy, SharePasteSnapshot } from "../types.js";
+import type { BindCode, BindRequest, ClipboardItem, Device, DeviceContext, GroupState, OfflineEnvelope, Policy, SharePasteSnapshot } from "../types.js";
 import { DEFAULT_POLICY, isItemAllowedByPolicy } from "../utils/policy.js";
 import {
   generateBindCode,
@@ -29,7 +29,7 @@ export interface RegisterDeviceResult {
 }
 
 export interface PresenceEvent {
-  type: "clipboard" | "pairing_request" | "connected";
+  type: "clipboard" | "pairing_request" | "connected" | "group_key_update";
   payload: unknown;
 }
 
@@ -209,6 +209,13 @@ export class SharePasteStore {
     });
   }
 
+  getDeviceContext(deviceId: string): DeviceContext {
+    this.cleanupExpired();
+    const device = this.requireDevice(deviceId);
+    device.lastSeenUnix = nowUnix();
+    return this.buildDeviceContext(device);
+  }
+
   listDevices(deviceId: string): Device[] {
     this.cleanupExpired();
     const requester = this.requireDevice(deviceId);
@@ -337,13 +344,22 @@ export class SharePasteStore {
     group.groupKeyVersion += 1;
     group.groupKeyBase64 = generateGroupKeyBase64();
 
-    request.sealedGroupKey = sealGroupKeyForDevice(
-      issuer.groupId,
-      requester.pubkey,
-      group.groupKeyVersion,
-      group.groupKeyBase64
-    );
     request.groupId = issuer.groupId;
+    request.groupKeyVersion = group.groupKeyVersion;
+    request.sealedGroupKey = this.buildDeviceContext(issuer).sealedGroupKey;
+
+    for (const memberId of this.groupDevices.get(issuer.groupId) ?? []) {
+      const presence = this.presences.get(memberId);
+      const member = this.devices.get(memberId);
+      if (!presence || !member || !member.active) {
+        continue;
+      }
+
+      presence.onEvent({
+        type: "group_key_update",
+        payload: this.buildGroupKeyUpdate(member)
+      });
+    }
 
     this.bindRequests.delete(requestId);
     return request;
@@ -508,5 +524,24 @@ export class SharePasteStore {
     if (count >= MAX_DEVICES_PER_GROUP) {
       throw new Error("GROUP_DEVICE_LIMIT_REACHED");
     }
+  }
+
+  private buildDeviceContext(device: Device): DeviceContext {
+    const group = this.groups.get(device.groupId)!;
+    return {
+      device,
+      groupId: group.groupId,
+      sealedGroupKey: sealGroupKeyForDevice(group.groupId, device.pubkey, group.groupKeyVersion, group.groupKeyBase64),
+      groupKeyVersion: group.groupKeyVersion
+    };
+  }
+
+  private buildGroupKeyUpdate(device: Device): { groupId: string; sealedGroupKey: string; groupKeyVersion: number } {
+    const context = this.buildDeviceContext(device);
+    return {
+      groupId: context.groupId,
+      sealedGroupKey: context.sealedGroupKey,
+      groupKeyVersion: context.groupKeyVersion
+    };
   }
 }
