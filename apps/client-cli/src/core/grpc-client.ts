@@ -4,6 +4,18 @@ import { fileURLToPath } from "node:url";
 import { credentials, loadPackageDefinition, type ClientDuplexStream } from "@grpc/grpc-js";
 import { loadSync } from "@grpc/proto-loader";
 import type { ClipboardPayload, SharePolicy } from "@sharepaste/client-core";
+import type {
+  BindCodeResult,
+  BindRequestResult,
+  ClientTransportPort,
+  ConfirmBindResult,
+  DeviceContextResult,
+  DeviceSummary,
+  RecoverGroupResult,
+  RealtimeMessage,
+  RealtimeStreamPort,
+  RegisterDeviceResult
+} from "./ports.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,45 +60,81 @@ const kindFromProto = (kind: string): ClipboardPayload["type"] => {
   return "text";
 };
 
-export interface RegisterDeviceResult {
-  device: {
-    deviceId: string;
-    groupId: string;
-    pubkey: string;
-    name: string;
-    platform: string;
+const toRealtimeMessage = (message: any): RealtimeMessage => {
+  if (message.clipboard?.item) {
+    return {
+      clipboard: {
+        item: {
+          itemId: message.clipboard.item.itemId,
+          type: kindFromProto(message.clipboard.item.type),
+          mime: message.clipboard.item.mime,
+          sizeBytes: Number(message.clipboard.item.sizeBytes),
+          createdAtUnix: Number(message.clipboard.item.createdAtUnix),
+          sourceDeviceId: message.clipboard.item.sourceDeviceId,
+          cipherRef: message.clipboard.item.cipherRef,
+          ciphertext: message.clipboard.item.ciphertext,
+          nonce: message.clipboard.item.nonce
+        },
+        preferredLanTargets: message.clipboard.preferredLanTargets ?? []
+      }
+    };
+  }
+
+  if (message.groupKeyUpdate) {
+    return {
+      groupKeyUpdate: {
+        groupId: message.groupKeyUpdate.groupId,
+        sealedGroupKey: message.groupKeyUpdate.sealedGroupKey,
+        groupKeyVersion: Number(message.groupKeyUpdate.groupKeyVersion)
+      }
+    };
+  }
+
+  if (message.pairingRequest) {
+    return {
+      pairingRequest: {
+        requestId: message.pairingRequest.requestId,
+        requesterDeviceId: message.pairingRequest.requesterDeviceId,
+        requesterName: message.pairingRequest.requesterName,
+        requesterPlatform: message.pairingRequest.requesterPlatform,
+        requestedAtUnix: Number(message.pairingRequest.requestedAtUnix),
+        expiresAtUnix: Number(message.pairingRequest.expiresAtUnix)
+      }
+    };
+  }
+
+  return {
+    connected: message.connected
   };
-  groupId: string;
-  recoveryPhrase: string;
-  sealedGroupKey: string;
+};
+
+class GrpcRealtimeStream implements RealtimeStreamPort {
+  constructor(private readonly stream: ClientDuplexStream<any, any>) {}
+
+  onData(handler: (message: RealtimeMessage) => void): void {
+    this.stream.on("data", (message: any) => {
+      handler(toRealtimeMessage(message));
+    });
+  }
+
+  onError(handler: (error: unknown) => void): void {
+    this.stream.on("error", handler);
+  }
+
+  onEnd(handler: () => void): void {
+    this.stream.on("end", handler);
+  }
+
+  onClose(handler: () => void): void {
+    this.stream.on("close", handler);
+  }
+
+  cancel(): void {
+    this.stream.cancel();
+  }
 }
 
-export interface RecoverGroupResult {
-  device: {
-    deviceId: string;
-    groupId: string;
-    pubkey: string;
-    name: string;
-    platform: string;
-  };
-  groupId: string;
-  sealedGroupKey: string;
-}
-
-export interface DeviceContextResult {
-  device: {
-    deviceId: string;
-    groupId: string;
-    pubkey: string;
-    name: string;
-    platform: string;
-  };
-  groupId: string;
-  sealedGroupKey: string;
-  groupKeyVersion: number;
-}
-
-export class SharePasteGrpcClient {
+export class SharePasteGrpcClient implements ClientTransportPort {
   private readonly deviceClient: any;
 
   private readonly pairingClient: any;
@@ -133,7 +181,7 @@ export class SharePasteGrpcClient {
     });
   }
 
-  listDevices(deviceId: string): Promise<Array<{ deviceId: string; name: string; platform: string; groupId: string }>> {
+  listDevices(deviceId: string): Promise<DeviceSummary[]> {
     return new Promise((resolve, reject) => {
       this.deviceClient.ListDevices({ deviceId }, (err: Error | null, response: any) => {
         if (err) {
@@ -169,9 +217,9 @@ export class SharePasteGrpcClient {
     });
   }
 
-  createBindCode(deviceId: string): Promise<{ code: string; expiresAtUnix: string; attemptsLeft: number }> {
+  createBindCode(deviceId: string): Promise<BindCodeResult> {
     return new Promise((resolve, reject) => {
-      this.pairingClient.CreateBindCode({ deviceId }, (err: Error | null, response: any) => {
+      this.pairingClient.CreateBindCode({ deviceId }, (err: Error | null, response: BindCodeResult) => {
         if (err) {
           reject(err);
           return;
@@ -181,9 +229,9 @@ export class SharePasteGrpcClient {
     });
   }
 
-  requestBind(code: string, requesterDeviceId: string): Promise<{ requestId: string; expiresAtUnix: string }> {
+  requestBind(code: string, requesterDeviceId: string): Promise<BindRequestResult> {
     return new Promise((resolve, reject) => {
-      this.pairingClient.RequestBind({ code, requesterDeviceId }, (err: Error | null, response: any) => {
+      this.pairingClient.RequestBind({ code, requesterDeviceId }, (err: Error | null, response: BindRequestResult) => {
         if (err) {
           reject(err);
           return;
@@ -193,13 +241,9 @@ export class SharePasteGrpcClient {
     });
   }
 
-  confirmBind(
-    requestId: string,
-    issuerDeviceId: string,
-    approve: boolean
-  ): Promise<{ approved: boolean; groupId: string; sealedGroupKey: string; groupKeyVersion: number }> {
+  confirmBind(requestId: string, issuerDeviceId: string, approve: boolean): Promise<ConfirmBindResult> {
     return new Promise((resolve, reject) => {
-      this.pairingClient.ConfirmBind({ requestId, issuerDeviceId, approve }, (err: Error | null, response: any) => {
+      this.pairingClient.ConfirmBind({ requestId, issuerDeviceId, approve }, (err: Error | null, response: ConfirmBindResult) => {
         if (err) {
           reject(err);
           return;
@@ -308,10 +352,10 @@ export class SharePasteGrpcClient {
     });
   }
 
-  openEventStream(deviceId: string, lanAddr: string | undefined): ClientDuplexStream<any, any> {
+  openEventStream(deviceId: string, lanAddr: string | undefined): RealtimeStreamPort {
     const stream = this.syncClient.OpenEventStream();
     stream.write({ hello: { deviceId, lanAddr } });
-    return stream;
+    return new GrpcRealtimeStream(stream);
   }
 
   ackItem(deviceId: string, itemId: string): Promise<void> {

@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import type { ClipboardPayload } from "@sharepaste/client-core";
+import type { IncomingItemStorePort } from "./ports.js";
 
 const extensionForMime = (payload: ClipboardPayload): string => {
   const mime = payload.mime.toLowerCase();
@@ -26,7 +27,7 @@ const extensionForMime = (payload: ClipboardPayload): string => {
   return payload.type === "image" ? ".img" : ".bin";
 };
 
-export class IncomingItemStore {
+export class IncomingItemStore implements IncomingItemStorePort {
   constructor(private readonly baseDir = path.join(os.homedir(), ".sharepaste", "received")) {}
 
   async materialize(payload: ClipboardPayload, plaintext: Uint8Array): Promise<string> {

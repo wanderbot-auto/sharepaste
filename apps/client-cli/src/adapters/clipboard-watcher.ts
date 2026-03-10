@@ -1,11 +1,7 @@
 import clipboard from "clipboardy";
+import type { ClipboardChange, ClipboardPort } from "../core/ports.js";
 
-export type ClipboardChange = {
-  kind: "text";
-  value: string;
-};
-
-export class ClipboardWatcher {
+export class ClipboardWatcher implements ClipboardPort {
   private timer: NodeJS.Timeout | undefined;
 
   private latest = "";

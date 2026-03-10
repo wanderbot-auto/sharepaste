@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { DeviceIdentity } from "@sharepaste/client-core";
+import type { PersistedStateStorePort } from "./ports.js";
 
 export interface PersistedState {
   deviceId: string;
@@ -50,7 +51,7 @@ const isPersistedState = (value: unknown): value is PersistedState => {
   );
 };
 
-export class StateStore {
+export class StateStore implements PersistedStateStorePort {
   private readonly filePath: string;
 
   constructor(filePath = defaultStatePath) {
