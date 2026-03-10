@@ -7,6 +7,7 @@ interface RootOptions {
   state?: string;
   name?: string;
   json?: boolean;
+  resetStaleState?: boolean;
 }
 
 const program = new Command();
@@ -15,15 +16,20 @@ program.name("sharepaste-client").description("SharePaste cross-platform clipboa
 
 program
   .option("--server <address>", "gRPC endpoint", process.env.SHAREPASTE_SERVER ?? "127.0.0.1:50052")
-  .option("--state <path>", "local state file path")
+  .option("--state <path>", "local state file path", process.env.SHAREPASTE_STATE_PATH)
   .option("--name <name>", "default device display name")
+  .option("--reset-stale-state", "clear saved state and re-register if server no longer knows this device", /^(1|true)$/i.test(process.env.SHAREPASTE_RESET_STALE_STATE ?? ""))
   .option("--json", "print machine-readable JSON output", false);
 
 const options = (): RootOptions => program.opts<RootOptions>();
 
 const getClient = (): SharePasteClient => {
   const opts = options();
-  return new SharePasteClient({ grpcAddress: opts.server, statePath: opts.state });
+  return new SharePasteClient({
+    grpcAddress: opts.server,
+    statePath: opts.state,
+    resetStaleState: opts.resetStaleState
+  });
 };
 
 const emit = (data: unknown, humanPrinter: () => void): void => {

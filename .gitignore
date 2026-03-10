@@ -8,3 +8,4 @@ coverage/
 .env
 macos/.build/
 macos/.swiftpm/
+.sharepaste-dev/

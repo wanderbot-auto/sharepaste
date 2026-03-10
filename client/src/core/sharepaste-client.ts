@@ -15,6 +15,7 @@ import { SyncEngine } from "./sync-engine.js";
 export interface SharePasteClientOptions {
   grpcAddress: string;
   statePath?: string;
+  resetStaleState?: boolean;
 }
 
 export class SharePasteClient {
@@ -40,18 +41,31 @@ export class SharePasteClient {
 
   private realtimeStream: ClientDuplexStream<any, any> | null = null;
 
+  private readonly resetStaleState: boolean;
+
   constructor(options: SharePasteClientOptions) {
     this.grpc = new SharePasteGrpcClient(options.grpcAddress);
     this.stateStore = new StateStore(options.statePath);
+    this.resetStaleState = options.resetStaleState ?? false;
   }
 
   async bootstrap(deviceName: string): Promise<PersistedState> {
     const existing = await this.stateStore.load();
     if (existing) {
-      const refreshed = await this.refreshPersistedState(existing);
-      this.state = refreshed;
-      this.syncEngine = new SyncEngine(refreshed.deviceId);
-      return refreshed;
+      try {
+        const refreshed = await this.refreshPersistedState(existing);
+        this.state = refreshed;
+        this.syncEngine = new SyncEngine(refreshed.deviceId);
+        return refreshed;
+      } catch (error) {
+        if (!this.shouldResetStaleState(error)) {
+          throw error;
+        }
+
+        await this.stateStore.clear();
+        this.state = null;
+        this.syncEngine = null;
+      }
     }
 
     const identity = this.crypto.createIdentity();
@@ -447,6 +461,15 @@ export class SharePasteClient {
       }
       throw error;
     }
+  }
+
+  private shouldResetStaleState(error: unknown): boolean {
+    if (!this.resetStaleState) {
+      return false;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    return message === "STALE_DEVICE_STATE";
   }
 
   private async applyGroupKeyUpdate(
