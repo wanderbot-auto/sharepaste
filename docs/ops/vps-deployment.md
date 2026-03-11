@@ -17,6 +17,17 @@ Because of that, the recommended setup for real-device testing is:
 
 If you need public access later, implement TLS on both server and clients first.
 
+If you explicitly want a **single image with Postgres + Redis + server bundled together**, use:
+
+- `Dockerfile.server-allinone`
+- `compose.server-allinone.yml`
+- `docs/ops/server-allinone-container.md`
+
+That path is more convenient for short-lived VPS testing, but less clean than the split-service deployment described below.
+For domestic-network environments, prefer building that image on a machine with stable network access, or override the base image through `BASE_IMAGE=<镜像源中的 node 基础镜像>`.
+If you already have a mirrored Node image locally, you can also retag it first with `scripts/prepare-node-base-image.sh`.
+For the all-in-one image workflow, the VPS side can now be reduced to `scripts/load-and-run-server-allinone.sh`.
+
 ## Minimum deployment shape
 
 - Ubuntu/Debian-class VPS

@@ -1,0 +1,58 @@
+ARG BASE_IMAGE=node:20-bookworm-slim
+
+FROM ${BASE_IMAGE} AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/server/package.json apps/server/package.json
+COPY apps/client-cli/package.json apps/client-cli/package.json
+COPY packages/client-core/package.json packages/client-core/package.json
+
+RUN npm ci
+
+COPY . .
+RUN npm run server:build
+
+FROM ${BASE_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends postgresql redis-server tini ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN PG_BIN_DIR="$(dirname "$(find /usr/lib/postgresql -type f -name initdb | sort | tail -n 1)")" \
+  && ln -sf "${PG_BIN_DIR}/initdb" /usr/local/bin/initdb \
+  && ln -sf "${PG_BIN_DIR}/pg_ctl" /usr/local/bin/pg_ctl \
+  && ln -sf "${PG_BIN_DIR}/pg_isready" /usr/local/bin/pg_isready \
+  && ln -sf "${PG_BIN_DIR}/postgres" /usr/local/bin/postgres \
+  && ln -sf "${PG_BIN_DIR}/psql" /usr/local/bin/psql
+
+WORKDIR /app
+
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/server/package.json ./apps/server/package.json
+COPY --from=build /app/apps/server/dist ./apps/server/dist
+COPY --from=build /app/packages/proto ./packages/proto
+COPY deploy/container/start-server-allinone.sh /usr/local/bin/start-server-allinone.sh
+
+RUN chmod +x /usr/local/bin/start-server-allinone.sh \
+  && mkdir -p /var/lib/sharepaste \
+  && chown -R postgres:postgres /var/lib/sharepaste
+
+ENV NODE_ENV=production \
+  SHAREPASTE_HOST=0.0.0.0 \
+  SHAREPASTE_PORT=50052 \
+  SHAREPASTE_STORAGE_MODE=durable \
+  SHAREPASTE_PG_USER=sharepaste \
+  SHAREPASTE_PG_PASSWORD=sharepaste \
+  SHAREPASTE_PG_DB=sharepaste \
+  SHAREPASTE_PG_PORT=5432 \
+  SHAREPASTE_REDIS_PORT=6379
+
+VOLUME ["/var/lib/sharepaste"]
+
+EXPOSE 50052
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/start-server-allinone.sh"]

@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+target
+.sharepaste-dev
+apps/desktop-macos/.build
+apps/desktop-windows/src-tauri/target
+apps/mobile-android/.gradle
+apps/mobile-android/app/build
+docs/pre-dev
+docker-compose.yml

@@ -1,0 +1,25 @@
+services:
+  sharepaste-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server-allinone
+    image: sharepaste/server-allinone:local
+    container_name: sharepaste-server
+    restart: unless-stopped
+    ports:
+      - "50052:50052"
+    environment:
+      SHAREPASTE_HOST: 0.0.0.0
+      SHAREPASTE_PORT: 50052
+      SHAREPASTE_STORAGE_MODE: durable
+      SHAREPASTE_PG_USER: sharepaste
+      SHAREPASTE_PG_PASSWORD: sharepaste
+      SHAREPASTE_PG_DB: sharepaste
+      SHAREPASTE_PG_PORT: 5432
+      SHAREPASTE_REDIS_PORT: 6379
+      SHAREPASTE_REDIS_PASSWORD: ""
+    volumes:
+      - sharepaste-allinone-data:/var/lib/sharepaste
+
+volumes:
+  sharepaste-allinone-data:

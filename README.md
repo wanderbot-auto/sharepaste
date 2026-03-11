@@ -65,6 +65,7 @@ This repository ships:
 - `docs/ops/incident-runbook.md`
 - `docs/ops/release-checklist.md`
 - `docs/ops/vps-deployment.md`
+- `docs/ops/server-allinone-container.md`
 
 ## Quick start
 
