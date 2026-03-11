@@ -99,6 +99,28 @@ From the repo:
 bash scripts/start-server-prod.sh
 ```
 
+查看脚本中文帮助：
+
+```bash
+bash scripts/start-server-prod.sh --help
+```
+
+如果你希望临时覆盖 PostgreSQL / Redis 认证参数，也可以直接传参启动：
+
+```bash
+bash scripts/start-server-prod.sh \
+  --host 0.0.0.0 \
+  --port 50052 \
+  --storage-mode durable \
+  --db-host 127.0.0.1 \
+  --db-port 5432 \
+  --db-name sharepaste \
+  --db-user sharepaste \
+  --db-password 'CHANGE_ME' \
+  --redis-host 127.0.0.1 \
+  --redis-port 6379
+```
+
 Expected outcome:
 
 - TypeScript server builds
