@@ -3,7 +3,7 @@
 ## Goals
 
 - Separate deployable applications from shared assets.
-- Keep the current macOS + CLI + server flow working while creating room for Windows, Linux, and Android clients.
+- Keep the current CLI + macOS + Windows + Android + server flow working while creating room for Linux clients.
 - Make future extraction of reusable client logic incremental instead of forcing a large rewrite.
 - Establish a Rust runtime that can become the stable cross-platform core for desktop and mobile clients.
 
@@ -13,9 +13,9 @@
 apps/
   client-cli/         TypeScript client runtime and CLI for desktop/server-side testing
   desktop-macos/      Native SwiftUI shell for macOS
-  desktop-windows/    Planned native or hybrid Windows shell
+  desktop-windows/    Native Tauri shell with Rust clipboard/tray backend
   desktop-linux/      Planned native or hybrid Linux shell
-  mobile-android/     Planned Android client shell
+  mobile-android/     Native Android client app (Compose + sync service + share target)
   server/             gRPC relay/control service
 packages/
   client-core/        Shared TypeScript reference runtime during migration
@@ -50,13 +50,15 @@ scripts/              Local developer entrypoints
 ## Platform Guidance
 
 - macOS: native SwiftUI shell calling the CLI bridge today, then migrate to shared core bindings later.
-- Windows: start with a shell that reuses the same client behavior contract as macOS.
+- Windows: native Tauri shell with a Rust system-integration layer and a Node runtime bridge that reuses the current client behavior contract.
 - Linux: keep packaging and desktop integration isolated from Windows and macOS concerns.
-- Android: keep mobile UX, permissions, and background execution separate from desktop assumptions.
+- Android: native mobile app with Compose UI, local persistence, gRPC transport, a foreground sync service, and a share target; keep mobile UX, permissions, and background execution separate from desktop assumptions.
 
 ## Workspace Guidance
 
 - Root npm workspaces only include active Node applications today.
 - Rust workspace management lives in the root `Cargo.toml`.
-- Non-Node apps such as Swift and future Android projects live under `apps/` but are built with platform-native tooling.
+- Non-Node apps such as Swift, Windows Tauri, and Android live under `apps/` and are built with platform-native tooling.
+- `apps/desktop-windows` is active code today and is built through its own Cargo manifest rather than the root Rust workspace.
+- `apps/mobile-android` is active code today, but it is still managed outside the root npm workspace and root scripts.
 - Root scripts should target package names like `@sharepaste/server` instead of hard-coded directories when possible.

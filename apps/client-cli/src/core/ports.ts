@@ -1,10 +1,7 @@
 import type { CipherEnvelope, ClipboardPayload, DeviceIdentity, SharePolicy } from "@sharepaste/client-core";
 import type { PersistedState } from "./state-store.js";
 
-export interface ClipboardChange {
-  kind: "text";
-  value: string;
-}
+export type ClipboardChange = { kind: "text"; value: string } | { kind: "image"; filePath: string; mime?: string };
 
 export interface ClipboardPort {
   start(onChange: (change: ClipboardChange) => Promise<void> | void, intervalMs?: number): Promise<void>;
@@ -148,4 +145,18 @@ export interface LoggerPort {
   info(message: string): void;
   warn(message: string): void;
   error(message: string, error?: unknown): void;
+}
+
+export interface IncomingClipboardEvent {
+  itemId: string;
+  type: ClipboardPayload["type"];
+  mime: string;
+  sourceDeviceId: string;
+  text?: string;
+  savedPath?: string;
+}
+
+export interface ClientEventHandlers {
+  onIncomingClipboard?(event: IncomingClipboardEvent): Promise<void> | void;
+  onPairingRequest?(event: PairingRequestEvent): Promise<void> | void;
 }

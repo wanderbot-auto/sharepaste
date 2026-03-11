@@ -7,6 +7,7 @@ import { ClientSession } from "./client-session.js";
 import { SharePasteGrpcClient } from "./grpc-client.js";
 import { IncomingItemStore } from "./incoming-item-store.js";
 import type {
+  ClientEventHandlers,
   ClientTransportPort,
   ClipboardPort,
   CryptoPort,
@@ -35,6 +36,7 @@ export interface SharePasteClientDependencies {
   incomingItems?: IncomingItemStorePort;
   session?: ClientSession;
   logger?: LoggerPort;
+  events?: ClientEventHandlers;
   platform?: () => string;
   wait?: (ms: number) => Promise<void>;
 }
@@ -73,6 +75,8 @@ export class SharePasteClient {
 
   private readonly logger: LoggerPort;
 
+  private readonly events: ClientEventHandlers;
+
   private readonly platform: () => string;
 
   private readonly wait: (ms: number) => Promise<void>;
@@ -94,6 +98,7 @@ export class SharePasteClient {
     this.incomingItems = dependencies.incomingItems ?? new IncomingItemStore();
     this.session = dependencies.session ?? new ClientSession();
     this.logger = dependencies.logger ?? defaultLogger;
+    this.events = dependencies.events ?? {};
     this.platform = dependencies.platform ?? (() => os.platform());
     this.wait = dependencies.wait ?? sleep;
     this.resetStaleState = options.resetStaleState ?? false;
@@ -226,7 +231,10 @@ export class SharePasteClient {
     await this.clipboard.start(async (change) => {
       if (change.kind === "text") {
         await this.sendText(change.value);
+        return;
       }
+
+      await this.sendFile(change.filePath, change.mime ?? "image/png", true);
     });
 
     this.realtimeStopRequested = false;
@@ -324,12 +332,27 @@ export class SharePasteClient {
     });
 
     if (item.type === "text") {
-      await this.clipboard.writeText(Buffer.from(plaintext).toString("utf8"));
+      const text = Buffer.from(plaintext).toString("utf8");
+      await this.clipboard.writeText(text);
+      await this.events.onIncomingClipboard?.({
+        itemId: item.itemId,
+        type: item.type,
+        mime: item.mime,
+        sourceDeviceId: item.sourceDeviceId,
+        text
+      });
       return;
     }
 
     const savedPath = await this.incomingItems.materialize(item, plaintext);
     this.logger.info(`saved ${item.type} payload to ${savedPath}`);
+    await this.events.onIncomingClipboard?.({
+      itemId: item.itemId,
+      type: item.type,
+      mime: item.mime,
+      sourceDeviceId: item.sourceDeviceId,
+      savedPath
+    });
   }
 
   private async sendPayload(
@@ -459,6 +482,7 @@ export class SharePasteClient {
     }
 
     if (message.pairingRequest) {
+      await this.events.onPairingRequest?.(message.pairingRequest);
       this.logger.info(
         `pair request from ${message.pairingRequest.requesterName} (${message.pairingRequest.requesterPlatform}), request_id=${message.pairingRequest.requestId}`
       );

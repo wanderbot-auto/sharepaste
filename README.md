@@ -7,12 +7,18 @@ This repository ships:
 - `apps/server/`: gRPC relay/control service (headless)
 - `apps/client-cli/`: cross-platform client core + CLI runtime (Windows/macOS/Linux)
 - `apps/desktop-macos/`: native macOS status-bar app (SwiftUI)
-- `apps/desktop-windows/`: planned Windows desktop shell
-- `apps/desktop-linux/`: planned Linux desktop shell
-- `apps/mobile-android/`: planned Android client
+- `apps/desktop-windows/`: native Windows desktop app (Tauri + Rust backend + runtime bridge)
+- `apps/desktop-linux/`: planned Linux desktop shell placeholder
+- `apps/mobile-android/`: native Android client app (standalone Android Studio/Gradle project)
 - `packages/proto/`: shared gRPC contract
 - `packages/client-core/`: current TypeScript reference implementation of shared client logic
 - `crates/client-runtime/`: long-term Rust shared runtime for cross-platform consistency
+
+## Current client status
+
+- Implemented client surfaces today: CLI (`apps/client-cli`), macOS desktop (`apps/desktop-macos`), Windows desktop (`apps/desktop-windows`), and Android (`apps/mobile-android`)
+- Linux desktop remains a future shell placeholder
+- Root scripts currently cover the Node-based server/CLI flow plus native macOS and Windows shells; Android is maintained as a standalone Gradle project
 
 ## Implemented v1 capabilities
 
@@ -37,6 +43,9 @@ This repository ships:
   - `core/crypto-agent.ts`
   - `core/sharepaste-client.ts`
 - `/apps/desktop-macos/Sources`: native macOS shell
+- `/apps/desktop-windows/src-tauri`: native Windows shell backend (tray, window, clipboard bridge)
+- `/apps/desktop-windows/web`: Windows desktop UI
+- `/apps/mobile-android/app/src`: native Android app (Compose UI, transport, sync service, share target)
 - `/packages/client-core/src`: current extracted TypeScript client runtime modules
 - `/packages/proto/sharepaste.proto`: shared protocol schema
 - `/crates/client-runtime/src`: Rust shared runtime modules
@@ -55,6 +64,7 @@ This repository ships:
 - `docs/ops/monitoring-baseline.md`
 - `docs/ops/incident-runbook.md`
 - `docs/ops/release-checklist.md`
+- `docs/ops/vps-deployment.md`
 
 ## Quick start
 
@@ -104,6 +114,8 @@ SHAREPASTE_INTEGRATION=1 SHAREPASTE_STORAGE_MODE=durable npm run server:test
 
 Current tests cover binding, policy conflicts, offline TTL handling, dedup/loop suppression, ring-buffer history, and cryptographic envelope round trips.
 
+Android unit tests live under `apps/mobile-android/app/src/test`, but they are not currently wired into the root `npm test` command.
+
 ## Release
 
 Pushing a tag like `v0.1.0` triggers `.github/workflows/release-client.yml`, which builds the native macOS desktop binary and uploads artifacts to GitHub Release.
@@ -127,3 +139,38 @@ Build release binary:
 ```bash
 npm run desktop:macos:build
 ```
+
+## Native Windows desktop app
+
+Current module status:
+
+- Tauri shell with static desktop UI
+- Rust backend for tray behavior, native clipboard access, and runtime bridge management
+- Node runtime bridge that reuses `@sharepaste/client` business logic without routing through the CLI parser
+- Text and image clipboard polling for Windows shell integration
+- Close-to-tray lifecycle with background sync semantics
+
+Run locally:
+
+```bash
+npm run desktop:windows:dev
+```
+
+Build with Cargo:
+
+```bash
+npm run desktop:windows:build
+```
+
+## Native Android app
+
+Current module status:
+
+- Jetpack Compose dashboard UI
+- gRPC transport wired to `packages/proto/sharepaste.proto`
+- Foreground sync service for keeping the realtime connection alive
+- Local session persistence and incoming item storage
+- Android share target for text, image, and file payloads
+- Foreground clipboard text observation; background clipboard auto-read is intentionally not attempted on modern Android
+
+Open locally in Android Studio using `apps/mobile-android`.

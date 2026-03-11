@@ -1,11 +1,11 @@
-# SharePaste 当前方案设计梳理与汇报（2026-03-09）
+# SharePaste 当前方案设计梳理与汇报（2026-03-11 更新）
 
 ## 1. 文档目的与范围
 - 目的：基于现有设计文档与当前代码实现，给出 SharePaste v0.1 内测阶段的“当前方案全景”和“落地状态”。
-- 范围：`server`、`client`、`macos`、`proto`、`docs/pre-dev`、`docs/ops`。
+- 范围：`server`、`client`、`macos`、`android`、`proto`、`docs/pre-dev`、`docs/ops`。
 - 基线时间：
   - 设计文档基线：2026-03-07
-  - 本次梳理时间：2026-03-09
+  - 本次梳理时间：2026-03-11
 
 ## 2. 输入材料
 - 产品与技术基线：
@@ -23,15 +23,18 @@
   - `apps/server/src/**`
   - `apps/client-cli/src/**`
   - `apps/desktop-macos/Sources/main.swift`
+  - `apps/mobile-android/app/src/**`
 
 ## 3. 当前方案总览
-SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装 + 桌面壳层”的三层方案：
+SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装 + 平台壳层”的三层方案：
 - 协议层：统一使用 gRPC + `packages/proto/sharepaste.proto`。
 - 服务层：`DeviceService`、`PairingService`、`PolicyService`、`SyncService` 四类服务。
 - 客户端层：CLI/Core 负责设备身份、策略校验、加密封装、同步引擎。
-- 桌面层：macOS SwiftUI 原生实现，调用本地命令桥，底层复用 CLI 能力。
+- 平台层：
+  - macOS：SwiftUI 原生实现，调用本地命令桥，底层复用 CLI 能力。
+  - Android：Compose 原生实现，直接接入 gRPC 传输、前台同步服务和分享入口。
 
-方案目标与 PRD 保持一致：覆盖注册、绑定、同步、撤销、恢复五条核心旅程，定位内测而非生产级 SLA。
+方案目标与 PRD 保持一致：覆盖注册、绑定、同步、撤销、恢复五条核心旅程，定位内测而非生产级 SLA。当前对外主验证路径仍是桌面优先，但仓库内已经存在可继续演进的 Android 原生客户端工程。
 
 ## 4. 架构设计（按组件）
 ### 4.1 Server（`server`）
@@ -64,6 +67,17 @@ SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装
 - 前端：SwiftUI 管理连接、设备、策略、绑定、发送等操作。
 - 命令桥：通过 `npm run -w @sharepaste/client dev -- ...` 调 CLI 子命令，`start_sync` 以子进程方式托管。
 - 当前定位：功能壳层，复用核心能力，便于快速覆盖桌面路径。
+
+### 4.4 Android（`apps/mobile-android`）
+- 前端：Jetpack Compose Dashboard + ViewModel 状态管理。
+- 传输层：原生 `SharePasteTransport` 直接对接 `packages/proto/sharepaste.proto`。
+- 同步层：`SyncForegroundService` 负责前台保活和实时连接，`SyncEngine` 负责发送与接收处理。
+- 本地能力：
+  - `SessionStore` 持久化会话与设备信息
+  - `IncomingItemStore` 保存接收条目
+  - 前台监听系统剪贴板文本变化并触发发送
+  - `ShareReceiverActivity` 接入系统分享，支持文本/图片/文件入口
+- 当前定位：已具备独立 Android Studio 工程和核心运行骨架，但尚未接入根目录 npm workspace / 根脚本发布链路。
 
 ## 5. 关键流程设计（现状）
 ### 5.1 注册与恢复
@@ -117,6 +131,9 @@ SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装
 - 已有基线文档：监控指标、告警阈值、事故处理、发布检查、回滚步骤均已定义。
 - 当前代码层仍偏“工程骨架”：
   - 有存储与运行时组件，但结构化日志字段、链路关联 ID 注入、可观测性埋点尚未系统落地。
+- 客户端交付现状：
+  - CLI 和 macOS 已接入根目录脚本，可直接通过 npm / Swift 工具链开发和构建。
+  - Android 为独立 Gradle 工程，可在 Android Studio 本地打开，但尚未接入根级统一构建、测试与发布流程。
 
 ## 9. 测试与质量现状
 ### 9.1 已覆盖
@@ -124,9 +141,11 @@ SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装
 - Durable 单测：持久化恢复路径。
 - Integration（条件运行）：Postgres/Redis 连通和行为验证。
 - Client 单测：加密往返、去重回环、历史上限。
+- Android 单测：`SharePasteCrypto` 与 `SyncEngine` 的基础行为验证。
 
 ### 9.2 缺口
 - Desktop 暂无单元测试。
+- Android 尚未接入仓库根级自动化测试命令。
 - PRD 里的端到端桌面旅程（尤其图像/文件双向路径）尚未形成自动化 E2E。
 
 ## 10. 与 PRD/计划的对齐评估
@@ -147,7 +166,9 @@ SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装
 - R1 数据层演进风险：从快照模型迁移到分表模型时，行为兼容与回放迁移复杂度较高。
 - R2 安全落差风险：`sealed_group_key` 未真实密封，存在与安全基线文档不一致的实现偏差。
 - R3 可观测性风险：缺少统一结构化日志与关联 ID，故障定位与归因效率受限。
-- R4 客户端能力边界：自动监听目前主要为文本，图片/文件更多依赖主动发送，不利于“无感剪贴板”体验验证。
+- R4 多端能力不一致风险：
+  - CLI/macOS/Android 的接入方式并不统一，Android 仍未进入根级构建与发布链路。
+  - 自动监听目前主要为文本；Android 背景态也受系统限制，图片/文件更多依赖主动发送或系统分享入口，不利于“无感剪贴板”体验验证。
 
 ## 12. 建议的下一步（按优先级）
 1. 完成密钥分发闭环（高优先级）
@@ -166,4 +187,4 @@ SharePaste 当前采用“协议先行 + 服务端中继 + 客户端加密封装
 - 把延迟、重连时延、错误率阈值接入 CI/发布检查。
 
 ## 13. 结论
-截至 2026-03-09，SharePaste 已具备可运行的 v0.1 内测骨架，核心业务流程基本可走通。当前最关键的问题不在“有没有功能”，而在“持久化形态、安全闭环、可观测性与 E2E 门禁”四个方向的工程收敛。
+截至 2026-03-11，SharePaste 已具备可运行的 v0.1 内测骨架，CLI、macOS 和 Android 三类客户端表面均已有实现，其中主开发/发布链路仍以 CLI + macOS 为主。当前最关键的问题不在“有没有功能”，而在“持久化形态、安全闭环、可观测性、多端收敛与 E2E 门禁”五个方向的工程收敛。

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SharePaste for Windows</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">SP</div>
+          <div>
+            <p class="eyebrow">Windows Client</p>
+            <h1>SharePaste</h1>
+          </div>
+        </div>
+        <div class="status-panel">
+          <span id="connectionDot" class="status-dot"></span>
+          <div>
+            <p class="eyebrow">Realtime</p>
+            <strong id="connectionLabel">Starting…</strong>
+          </div>
+        </div>
+        <div class="sidebar-copy">
+          <p>Desktop-first clipboard sync with tray background behavior and native Windows clipboard integration.</p>
+        </div>
+        <div class="sidebar-actions">
+          <button id="startSyncButton" class="primary">Start Sync</button>
+          <button id="stopSyncButton" class="secondary">Stop Sync</button>
+          <button id="hideWindowButton" class="ghost">Hide To Tray</button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <section class="hero">
+          <div>
+            <p class="eyebrow">Current Device</p>
+            <h2 id="deviceHeadline">Not initialized</h2>
+            <p id="deviceSubline" class="muted">Initialize a device or recover an existing group to start syncing.</p>
+          </div>
+          <div class="hero-actions">
+            <button id="refreshDevicesButton" class="secondary">Refresh Devices</button>
+            <button id="refreshPolicyButton" class="secondary">Refresh Policy</button>
+          </div>
+        </section>
+
+        <section class="grid">
+          <article class="card card-setup">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Setup</p>
+                <h3>Registration & Recovery</h3>
+              </div>
+            </div>
+            <label>
+              Device Name
+              <input id="deviceNameInput" type="text" placeholder="My Windows PC" />
+            </label>
+            <div class="row">
+              <button id="initializeButton" class="primary">Initialize Device</button>
+              <button id="inspectStateButton" class="secondary">Inspect Local State</button>
+            </div>
+            <label>
+              Recovery Phrase
+              <textarea id="recoveryPhraseInput" rows="3" placeholder="Paste your recovery phrase"></textarea>
+            </label>
+            <button id="recoverButton" class="secondary">Recover Group</button>
+            <div class="recovery-box">
+              <p class="eyebrow">Recovery Phrase</p>
+              <code id="recoveryPhraseValue">Not available</code>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Pairing</p>
+                <h3>Bind Another Device</h3>
+              </div>
+            </div>
+            <div class="bind-code">
+              <span id="bindCodeValue">------</span>
+            </div>
+            <div class="row">
+              <button id="generateBindCodeButton" class="primary">Generate Bind Code</button>
+            </div>
+            <label>
+              Enter Bind Code
+              <input id="bindRequestInput" type="text" maxlength="6" placeholder="123456" />
+            </label>
+            <button id="requestBindButton" class="secondary">Request Bind</button>
+            <div class="pending-list">
+              <div class="card-subheader">
+                <p class="eyebrow">Pending Requests</p>
+              </div>
+              <div id="pairingRequestsList" class="stack muted">No pending requests.</div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Devices</p>
+                <h3>Group Members</h3>
+              </div>
+            </div>
+            <div id="devicesList" class="stack muted">No devices loaded.</div>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Policy</p>
+                <h3>Sharing Rules</h3>
+              </div>
+            </div>
+            <label class="toggle">
+              <input id="allowTextInput" type="checkbox" checked />
+              <span>Allow Text</span>
+            </label>
+            <label class="toggle">
+              <input id="allowImageInput" type="checkbox" checked />
+              <span>Allow Image</span>
+            </label>
+            <label class="toggle">
+              <input id="allowFileInput" type="checkbox" checked />
+              <span>Allow File</span>
+            </label>
+            <label>
+              Max File Size (bytes)
+              <input id="maxFileSizeInput" type="number" min="1" step="1" value="3145728" />
+            </label>
+            <button id="savePolicyButton" class="primary">Save Policy</button>
+          </article>
+
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Clipboard</p>
+                <h3>Manual Text Send</h3>
+              </div>
+            </div>
+            <label>
+              Text Payload
+              <textarea id="manualTextInput" rows="5" placeholder="Type text to send immediately"></textarea>
+            </label>
+            <button id="sendTextButton" class="primary">Send Text</button>
+            <p class="muted small">Text and image clipboard polling continue while the app is hidden to tray.</p>
+          </article>
+
+          <article class="card card-activity">
+            <div class="card-header">
+              <div>
+                <p class="eyebrow">Activity</p>
+                <h3>Runtime Events</h3>
+              </div>
+              <button id="clearActivityButton" class="ghost">Clear</button>
+            </div>
+            <div id="activityFeed" class="activity-feed muted">No activity yet.</div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="./main.js"></script>
+  </body>
+</html>
