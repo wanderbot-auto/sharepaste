@@ -35,7 +35,7 @@ SharePaste 服务端启动脚本
 
 常用参数：
   -h, --help                     显示中文帮助
-  --env-file <路径>             指定环境变量文件，默认 .env.server
+  --env-file <路径>             指定环境变量文件
   --host <地址>                 服务监听地址，默认 0.0.0.0
   --port <端口>                 服务监听端口，默认 50052
   --storage-mode <模式>         存储模式：memory 或 durable，默认 durable
@@ -62,9 +62,11 @@ SharePaste 服务端启动脚本
   --redis-db <编号>             例如 0 / 1
 
 说明：
-  1. 默认会先读取 .env.server；命令行参数优先级最高。
-  2. 若密码包含 @、:、/、? 等特殊字符，建议直接使用 --database-url 或 --redis-url。
-  3. durable 模式下建议显式提供 PostgreSQL 与 Redis 参数，避免误连本地默认配置。
+  1. 未传 --env-file 时，会优先读取仓库根目录 .env.server；
+     若该文件不存在且 /etc/sharepaste/server.env 存在，则自动读取后者。
+  2. 命令行参数优先级最高。
+  3. 若密码包含 @、:、/、? 等特殊字符，建议直接使用 --database-url 或 --redis-url。
+  4. durable 模式下建议显式提供 PostgreSQL 与 Redis 参数，避免误连本地默认配置。
 
 示例：
   bash scripts/start-server-prod.sh --host 0.0.0.0 --port 50052
@@ -91,6 +93,20 @@ require_value() {
     echo "参数错误：${flag} 需要指定值" >&2
     echo "可执行 bash scripts/start-server-prod.sh --help 查看帮助" >&2
     exit 1
+  fi
+}
+
+resolve_env_file() {
+  if [[ "$ENV_FILE" != ".env.server" ]]; then
+    return
+  fi
+
+  if [[ -f "$ENV_FILE" ]]; then
+    return
+  fi
+
+  if [[ -f "/etc/sharepaste/server.env" ]]; then
+    ENV_FILE="/etc/sharepaste/server.env"
   fi
 }
 
@@ -201,7 +217,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+resolve_env_file
+
 if [[ -f "$ENV_FILE" ]]; then
+  if [[ ! -r "$ENV_FILE" ]]; then
+    echo "无法读取环境文件：$ENV_FILE" >&2
+    echo "请检查文件权限，建议设置为 root:sharepaste 且权限为 640。" >&2
+    echo "若只做一次性排查，也可改用命令行参数传入数据库和 Redis 连接信息。" >&2
+    exit 1
+  fi
   # shellcheck disable=SC1090
   source "$ENV_FILE"
 fi

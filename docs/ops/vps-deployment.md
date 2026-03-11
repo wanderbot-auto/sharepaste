@@ -88,6 +88,7 @@ Copy the example file:
 ```bash
 sudo mkdir -p /etc/sharepaste
 sudo cp deploy/server/sharepaste-server.env.example /etc/sharepaste/server.env
+sudo chown root:sharepaste /etc/sharepaste/server.env
 sudo chmod 640 /etc/sharepaste/server.env
 ```
 
@@ -109,6 +110,15 @@ From the repo:
 ```bash
 bash scripts/start-server-prod.sh
 ```
+
+如果你把生产环境变量放在 `/etc/sharepaste/server.env`，也可以显式指定：
+
+```bash
+bash scripts/start-server-prod.sh --env-file /etc/sharepaste/server.env
+```
+
+如果提示 `Permission denied`，通常是因为当前登录用户无权读取该文件。
+推荐做法是保持文件权限为 `root:sharepaste` + `640`，并用 `sharepaste` 服务用户执行验证，或直接通过 `systemd` 启动服务。
 
 查看脚本中文帮助：
 
