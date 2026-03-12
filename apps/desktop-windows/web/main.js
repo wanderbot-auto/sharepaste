@@ -1,10 +1,12 @@
 const tauri = window.__TAURI__;
 
 if (!tauri?.tauri || !tauri?.event) {
-  document.body.innerHTML = "<main style='padding:24px;font-family:Segoe UI,sans-serif'>Tauri APIs are unavailable. Launch this UI through the SharePaste Windows shell.</main>";
+  document.body.innerHTML =
+    "<main style='padding:24px;font-family:Segoe UI,sans-serif'>Tauri APIs are unavailable. Launch this UI through the SharePaste Windows shell.</main>";
   throw new Error("Tauri APIs unavailable");
 }
 
+const MB = 1024 * 1024;
 const invoke = (command, payload = {}) => tauri.tauri.invoke(command, payload);
 const listen = (event, handler) => tauri.event.listen(event, handler);
 
@@ -15,7 +17,8 @@ const state = {
   pairingRequests: [],
   bindCode: null,
   syncRunning: false,
-  activity: [],
+  connectionActive: false,
+  connectionLabel: "Starting",
   clipboardPollingTimer: null,
   lastClipboardFingerprint: null,
   suppressedClipboardFingerprint: null
@@ -24,32 +27,39 @@ const state = {
 const el = {
   connectionDot: document.getElementById("connectionDot"),
   connectionLabel: document.getElementById("connectionLabel"),
+  heroStateBadge: document.getElementById("heroStateBadge"),
   deviceHeadline: document.getElementById("deviceHeadline"),
   deviceSubline: document.getElementById("deviceSubline"),
-  deviceNameInput: document.getElementById("deviceNameInput"),
-  recoveryPhraseInput: document.getElementById("recoveryPhraseInput"),
-  recoveryPhraseValue: document.getElementById("recoveryPhraseValue"),
+  syncToggleButton: document.getElementById("syncToggleButton"),
+  syncToggleLabel: document.getElementById("syncToggleLabel"),
+  generateBindCodeButton: document.getElementById("generateBindCodeButton"),
   bindCodeValue: document.getElementById("bindCodeValue"),
+  codeShell: document.querySelector(".code-shell"),
+  devicesMeta: document.getElementById("devicesMeta"),
   devicesList: document.getElementById("devicesList"),
+  pairingRequestsInline: document.getElementById("pairingRequestsInline"),
   pairingRequestsList: document.getElementById("pairingRequestsList"),
+  deviceNameInput: document.getElementById("deviceNameInput"),
+  serverAddressInput: document.getElementById("serverAddressInput"),
+  saveServerButton: document.getElementById("saveServerButton"),
+  recoveryPhraseInput: document.getElementById("recoveryPhraseInput"),
+  bindRequestInput: document.getElementById("bindRequestInput"),
   allowTextInput: document.getElementById("allowTextInput"),
   allowImageInput: document.getElementById("allowImageInput"),
   allowFileInput: document.getElementById("allowFileInput"),
-  maxFileSizeInput: document.getElementById("maxFileSizeInput"),
-  manualTextInput: document.getElementById("manualTextInput"),
-  activityFeed: document.getElementById("activityFeed"),
-  bindRequestInput: document.getElementById("bindRequestInput")
+  maxFileSizeInput: document.getElementById("maxFileSizeInput")
 };
 
-const addActivity = (level, message, detail) => {
-  state.activity.unshift({
-    level,
-    message,
-    detail: detail || "",
-    createdAt: new Date().toLocaleTimeString()
-  });
-  state.activity = state.activity.slice(0, 80);
-  renderActivity();
+const escapeHtml = (value) =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const reportIssue = (message) => {
+  console.error(message);
 };
 
 const bridge = async (method, params = {}) => {
@@ -57,73 +67,139 @@ const bridge = async (method, params = {}) => {
     return await invoke("bridge_request", { method, params });
   } catch (error) {
     const message = error?.toString?.() ?? String(error);
-    addActivity("error", `Bridge request failed: ${method}`, message);
+    reportIssue(`Bridge request failed: ${method} | ${message}`);
     throw error;
   }
 };
 
+const renderStatus = () => {
+  let badgeText = "Setup required";
+  let badgeClass = "status-badge";
+  let buttonText = "Start Sync";
+  let buttonDisabled = !state.currentDevice;
+  let subtitle = "Set up this PC to start syncing clipboard content.";
+
+  if (state.currentDevice) {
+    subtitle = `${state.currentDevice.platform} | ${state.currentDevice.deviceId}`;
+    badgeText = "Ready";
+    badgeClass = "status-badge ready";
+  }
+
+  if (state.currentDevice && state.syncRunning && state.connectionActive) {
+    badgeText = "Live";
+    badgeClass = "status-badge live";
+    buttonText = "Pause Sync";
+  } else if (state.currentDevice && state.connectionLabel === "Stopped") {
+    badgeText = "Paused";
+    badgeClass = "status-badge paused";
+  }
+
+  if (el.heroStateBadge) {
+    el.heroStateBadge.className = badgeClass;
+    el.heroStateBadge.textContent = badgeText;
+  }
+
+  if (el.deviceHeadline) {
+    el.deviceHeadline.textContent = state.currentDevice?.deviceName || "SharePaste";
+  }
+
+  if (el.deviceSubline) {
+    el.deviceSubline.textContent = subtitle;
+  }
+
+  if (el.syncToggleLabel) {
+    el.syncToggleLabel.textContent = buttonText;
+  }
+
+  if (el.syncToggleButton) {
+    el.syncToggleButton.disabled = buttonDisabled;
+  }
+
+  if (el.generateBindCodeButton) {
+    el.generateBindCodeButton.disabled = buttonDisabled;
+  }
+
+  [el.allowTextInput, el.allowImageInput, el.allowFileInput, el.maxFileSizeInput].forEach((input) => {
+    if (input) {
+      input.disabled = !state.currentDevice;
+    }
+  });
+};
+
 const setConnectionState = (connected, label) => {
-  el.connectionDot.className = `status-dot ${connected ? "connected" : "disconnected"}`;
-  el.connectionLabel.textContent = label;
-};
+  state.connectionActive = connected;
+  state.connectionLabel = label;
 
-const renderHeader = () => {
-  if (!state.currentDevice) {
-    el.deviceHeadline.textContent = "Not initialized";
-    el.deviceSubline.textContent = "Initialize a device or recover an existing group to start syncing.";
-    el.recoveryPhraseValue.textContent = "Not available";
-    return;
+  if (el.connectionDot) {
+    el.connectionDot.className = `status-dot ${connected ? "connected" : "disconnected"}`;
   }
 
-  el.deviceHeadline.textContent = `${state.currentDevice.deviceName} (${state.currentDevice.platform})`;
-  el.deviceSubline.textContent = `Device ${state.currentDevice.deviceId} in group ${state.currentDevice.groupId}`;
-  el.recoveryPhraseValue.textContent = state.currentDevice.recoveryPhrase || "Not available";
+  if (el.connectionLabel) {
+    el.connectionLabel.textContent = label;
+  }
+
+  renderStatus();
 };
 
+const renderBindCode = () => {
+  if (el.bindCodeValue) {
+    el.bindCodeValue.textContent = state.bindCode?.code || "------";
+  }
+
+  if (el.codeShell) {
+    el.codeShell.classList.toggle("has-code", Boolean(state.bindCode?.code));
+  }
+};
 const renderDevices = () => {
-  if (!state.devices.length) {
-    el.devicesList.className = "stack muted";
-    el.devicesList.textContent = "No devices loaded.";
+  const count = state.devices.length;
+  if (el.devicesMeta) {
+    el.devicesMeta.textContent = String(count);
+  }
+
+  if (!count) {
+    el.devicesList.innerHTML = '<div class="empty-state">No paired devices</div>';
     return;
   }
 
-  el.devicesList.className = "stack";
   el.devicesList.innerHTML = state.devices
     .map(
       (device) => `
-        <div class="device-row">
+        <article class="device-item ${state.currentDevice?.deviceId === device.deviceId ? "active" : ""}">
           <div>
-            <strong>${device.name}</strong>
-            <div class="muted small">${device.platform} · ${device.deviceId}</div>
+            <div class="item-title">${escapeHtml(device.name)}</div>
+            <div class="item-meta">${escapeHtml(device.platform)}</div>
           </div>
-          <button class="ghost" data-remove-device="${device.deviceId}">Remove</button>
-        </div>
+          <button class="list-action" type="button" data-remove-device="${escapeHtml(device.deviceId)}">Remove</button>
+        </article>
       `
     )
     .join("");
 };
 
 const renderPairingRequests = () => {
-  if (!state.pairingRequests.length) {
-    el.pairingRequestsList.className = "stack muted";
-    el.pairingRequestsList.textContent = "No pending requests.";
+  const count = state.pairingRequests.length;
+  if (el.pairingRequestsInline) {
+    el.pairingRequestsInline.hidden = count === 0;
+  }
+
+  if (!count) {
+    el.pairingRequestsList.innerHTML = "";
     return;
   }
 
-  el.pairingRequestsList.className = "stack";
   el.pairingRequestsList.innerHTML = state.pairingRequests
     .map(
       (request) => `
-        <div class="pairing-row">
+        <article class="request-item">
           <div>
-            <strong>${request.requesterName}</strong>
-            <div class="muted small">${request.requesterPlatform} · request ${request.requestId}</div>
+            <div class="item-title">${escapeHtml(request.requesterName)}</div>
+            <div class="item-meta">${escapeHtml(request.requesterPlatform)}</div>
           </div>
-          <div class="row">
-            <button class="primary" data-confirm-pair="${request.requestId}">Approve</button>
-            <button class="ghost" data-reject-pair="${request.requestId}">Reject</button>
+          <div class="request-actions">
+            <button class="request-action" type="button" data-confirm-pair="${escapeHtml(request.requestId)}">Accept</button>
+            <button class="request-action secondary" type="button" data-reject-pair="${escapeHtml(request.requestId)}">Ignore</button>
           </div>
-        </div>
+        </article>
       `
     )
     .join("");
@@ -134,36 +210,21 @@ const renderPolicy = () => {
     return;
   }
 
-  el.allowTextInput.checked = Boolean(state.policy.allowText);
-  el.allowImageInput.checked = Boolean(state.policy.allowImage);
-  el.allowFileInput.checked = Boolean(state.policy.allowFile);
-  el.maxFileSizeInput.value = String(state.policy.maxFileSizeBytes);
-};
-
-const renderActivity = () => {
-  if (!state.activity.length) {
-    el.activityFeed.className = "activity-feed muted";
-    el.activityFeed.textContent = "No activity yet.";
-    return;
+  if (el.allowTextInput) el.allowTextInput.checked = Boolean(state.policy.allowText);
+  if (el.allowImageInput) el.allowImageInput.checked = Boolean(state.policy.allowImage);
+  if (el.allowFileInput) el.allowFileInput.checked = Boolean(state.policy.allowFile);
+  if (el.maxFileSizeInput) {
+    el.maxFileSizeInput.value = String(Math.max(1, Math.round(state.policy.maxFileSizeBytes / MB)));
   }
-
-  el.activityFeed.className = "activity-feed";
-  el.activityFeed.innerHTML = state.activity
-    .map(
-      (entry) => `
-        <div class="activity-row">
-          <div class="activity-meta">${entry.level}<br />${entry.createdAt}</div>
-          <div class="activity-message ${entry.level === "error" ? "danger" : ""}">${[entry.message, entry.detail].filter(Boolean).join("\n")}</div>
-        </div>
-      `
-    )
-    .join("");
 };
 
 const refreshDevices = async () => {
   if (!state.currentDevice) {
+    state.devices = [];
+    renderDevices();
     return;
   }
+
   const result = await bridge("listDevices");
   state.devices = result.devices ?? [];
   renderDevices();
@@ -173,6 +234,7 @@ const refreshPolicy = async () => {
   if (!state.currentDevice) {
     return;
   }
+
   state.policy = await bridge("getPolicy");
   renderPolicy();
 };
@@ -185,7 +247,6 @@ const ensureRealtime = async () => {
   await bridge("startRealtime");
   state.syncRunning = true;
   setConnectionState(true, "Running");
-  addActivity("info", "Realtime sync started");
   startClipboardPolling();
 };
 
@@ -193,11 +254,23 @@ const stopRealtime = async () => {
   if (!state.syncRunning) {
     return;
   }
+
   await bridge("stopRealtime");
   state.syncRunning = false;
   setConnectionState(false, "Stopped");
-  addActivity("warn", "Realtime sync stopped");
   stopClipboardPolling();
+};
+
+const toggleRealtime = async () => {
+  if (!state.currentDevice) {
+    return;
+  }
+
+  if (state.syncRunning) {
+    await stopRealtime();
+  } else {
+    await ensureRealtime();
+  }
 };
 
 const startClipboardPolling = () => {
@@ -238,7 +311,7 @@ const startClipboardPolling = () => {
         });
       }
     } catch (error) {
-      addActivity("error", "Clipboard polling failed", error?.toString?.() ?? String(error));
+      reportIssue(`Clipboard polling failed: ${error?.toString?.() ?? String(error)}`);
     }
   }, 800);
 };
@@ -247,13 +320,12 @@ const stopClipboardPolling = () => {
   if (!state.clipboardPollingTimer) {
     return;
   }
+
   window.clearInterval(state.clipboardPollingTimer);
   state.clipboardPollingTimer = null;
 };
 
 const handleIncomingClipboard = async (payload) => {
-  addActivity("info", `Received ${payload.type} from ${payload.sourceDeviceId}`, payload.savedPath || payload.text || "");
-
   if (payload.type === "text" && payload.text) {
     const snapshot = await invoke("write_text_clipboard", { value: payload.text });
     state.suppressedClipboardFingerprint = snapshot.fingerprint;
@@ -273,14 +345,15 @@ const handleBridgeEvent = async (event) => {
   }
 
   if (payload.event === "log") {
-    addActivity(payload.payload.level, payload.payload.message, payload.payload.detail);
+    if (payload.payload.level === "error") {
+      reportIssue(payload.payload.detail || payload.payload.message || "Unknown runtime error");
+    }
     return;
   }
 
   if (payload.event === "pairing_request") {
     state.pairingRequests.unshift(payload.payload);
     renderPairingRequests();
-    addActivity("info", `Pairing request from ${payload.payload.requesterName}`, payload.payload.requestId);
     return;
   }
 
@@ -297,17 +370,20 @@ const handleBridgeEvent = async (event) => {
 
 const loadExistingState = async () => {
   const existing = await bridge("inspectState");
+  state.currentDevice = existing || null;
+
   if (!existing) {
-    renderHeader();
+    state.devices = [];
+    state.policy = null;
+    state.syncRunning = false;
     renderDevices();
     renderPairingRequests();
-    renderActivity();
+    renderStatus();
     setConnectionState(false, "Setup Required");
     return;
   }
 
-  state.currentDevice = existing;
-  renderHeader();
+  renderStatus();
   setConnectionState(false, "Ready");
   await Promise.all([refreshDevices(), refreshPolicy()]);
   await ensureRealtime();
@@ -316,7 +392,7 @@ const loadExistingState = async () => {
 const initializeDevice = async () => {
   const deviceName = el.deviceNameInput.value.trim() || "sharepaste-windows";
   state.currentDevice = await bridge("bootstrap", { deviceName });
-  renderHeader();
+  renderStatus();
   await Promise.all([refreshDevices(), refreshPolicy()]);
   await ensureRealtime();
 };
@@ -325,52 +401,78 @@ const recoverGroup = async () => {
   const phrase = el.recoveryPhraseInput.value.trim();
   const deviceName = el.deviceNameInput.value.trim() || "sharepaste-windows";
   if (!phrase) {
-    addActivity("warn", "Recovery phrase is required");
     return;
   }
 
   state.currentDevice = await bridge("recover", { phrase, deviceName });
-  renderHeader();
+  renderStatus();
   await Promise.all([refreshDevices(), refreshPolicy()]);
   await ensureRealtime();
 };
 
 const generateBindCode = async () => {
-  const code = await bridge("createBindCode");
-  state.bindCode = code;
-  el.bindCodeValue.textContent = code.code ?? "------";
-  addActivity("info", "Generated bind code", `expires at ${code.expiresAtUnix}`);
+  state.bindCode = await bridge("createBindCode");
+  renderBindCode();
 };
 
 const requestBind = async () => {
   const code = el.bindRequestInput.value.trim();
   if (!code) {
-    addActivity("warn", "Bind code is required");
     return;
   }
-  const result = await bridge("requestBind", { code });
-  addActivity("info", "Bind request sent", result.requestId);
+
+  await bridge("requestBind", { code });
+  el.bindRequestInput.value = "";
 };
 
 const savePolicy = async () => {
+  if (!state.currentDevice) {
+    return;
+  }
+
+  const maxFileSizeMB = Math.max(1, Number(el.maxFileSizeInput.value) || 1);
   state.policy = await bridge("updatePolicy", {
     allowText: el.allowTextInput.checked,
     allowImage: el.allowImageInput.checked,
     allowFile: el.allowFileInput.checked,
-    maxFileSizeBytes: Number(el.maxFileSizeInput.value)
+    maxFileSizeBytes: maxFileSizeMB * MB
   });
   renderPolicy();
-  addActivity("info", "Policy updated");
 };
 
-const sendText = async () => {
-  const value = el.manualTextInput.value;
-  if (!value.trim()) {
-    addActivity("warn", "Text payload is empty");
+const loadServerAddress = async () => {
+  const server = await invoke("get_server_address");
+  if (el.serverAddressInput) {
+    el.serverAddressInput.value = server;
+  }
+};
+
+const saveServerAddress = async () => {
+  if (!el.serverAddressInput) {
     return;
   }
-  const result = await bridge("sendText", { value });
-  addActivity(result.accepted ? "info" : "warn", result.accepted ? "Text sent" : "Text blocked by policy");
+
+  const server = el.serverAddressInput.value.trim();
+  if (!server) {
+    return;
+  }
+
+  if (el.saveServerButton) {
+    el.saveServerButton.disabled = true;
+  }
+
+  try {
+    await invoke("set_server_address", { server });
+    state.bindCode = null;
+    state.syncRunning = false;
+    stopClipboardPolling();
+    renderBindCode();
+    await loadExistingState();
+  } finally {
+    if (el.saveServerButton) {
+      el.saveServerButton.disabled = false;
+    }
+  }
 };
 
 document.addEventListener("click", async (event) => {
@@ -379,44 +481,40 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (target.dataset.removeDevice) {
-    await bridge("removeDevice", { targetDeviceId: target.dataset.removeDevice });
-    addActivity("warn", "Removed device", target.dataset.removeDevice);
+  const removeButton = target.closest("[data-remove-device]");
+  if (removeButton instanceof HTMLElement) {
+    await bridge("removeDevice", { targetDeviceId: removeButton.dataset.removeDevice });
     await refreshDevices();
     return;
   }
 
-  if (target.dataset.confirmPair) {
-    await bridge("confirmBind", { requestId: target.dataset.confirmPair, approve: true });
-    state.pairingRequests = state.pairingRequests.filter((request) => request.requestId !== target.dataset.confirmPair);
+  const confirmButton = target.closest("[data-confirm-pair]");
+  if (confirmButton instanceof HTMLElement) {
+    await bridge("confirmBind", { requestId: confirmButton.dataset.confirmPair, approve: true });
+    state.pairingRequests = state.pairingRequests.filter((request) => request.requestId !== confirmButton.dataset.confirmPair);
     renderPairingRequests();
-    addActivity("info", "Approved pairing request", target.dataset.confirmPair);
     return;
   }
 
-  if (target.dataset.rejectPair) {
-    await bridge("confirmBind", { requestId: target.dataset.rejectPair, approve: false });
-    state.pairingRequests = state.pairingRequests.filter((request) => request.requestId !== target.dataset.rejectPair);
+  const rejectButton = target.closest("[data-reject-pair]");
+  if (rejectButton instanceof HTMLElement) {
+    await bridge("confirmBind", { requestId: rejectButton.dataset.rejectPair, approve: false });
+    state.pairingRequests = state.pairingRequests.filter((request) => request.requestId !== rejectButton.dataset.rejectPair);
     renderPairingRequests();
-    addActivity("warn", "Rejected pairing request", target.dataset.rejectPair);
   }
 });
 
-document.getElementById("initializeButton").addEventListener("click", () => void initializeDevice());
-document.getElementById("recoverButton").addEventListener("click", () => void recoverGroup());
-document.getElementById("inspectStateButton").addEventListener("click", () => void loadExistingState());
-document.getElementById("generateBindCodeButton").addEventListener("click", () => void generateBindCode());
-document.getElementById("requestBindButton").addEventListener("click", () => void requestBind());
-document.getElementById("refreshDevicesButton").addEventListener("click", () => void refreshDevices());
-document.getElementById("refreshPolicyButton").addEventListener("click", () => void refreshPolicy());
-document.getElementById("savePolicyButton").addEventListener("click", () => void savePolicy());
-document.getElementById("sendTextButton").addEventListener("click", () => void sendText());
-document.getElementById("startSyncButton").addEventListener("click", () => void ensureRealtime());
-document.getElementById("stopSyncButton").addEventListener("click", () => void stopRealtime());
-document.getElementById("hideWindowButton").addEventListener("click", () => void invoke("hide_main_window"));
-document.getElementById("clearActivityButton").addEventListener("click", () => {
-  state.activity = [];
-  renderActivity();
+document.getElementById("initializeButton")?.addEventListener("click", () => void initializeDevice());
+document.getElementById("recoverButton")?.addEventListener("click", () => void recoverGroup());
+document.getElementById("generateBindCodeButton")?.addEventListener("click", () => void generateBindCode());
+document.getElementById("requestBindButton")?.addEventListener("click", () => void requestBind());
+document.getElementById("saveServerButton")?.addEventListener("click", () => void saveServerAddress());
+document.getElementById("hideWindowButton")?.addEventListener("click", () => void invoke("hide_main_window"));
+document.getElementById("quitAppButton")?.addEventListener("click", () => void invoke("quit_app"));
+document.getElementById("syncToggleButton")?.addEventListener("click", () => void toggleRealtime());
+
+[el.allowTextInput, el.allowImageInput, el.allowFileInput, el.maxFileSizeInput].forEach((input) => {
+  input?.addEventListener("change", () => void savePolicy());
 });
 
 window.addEventListener("beforeunload", () => {
@@ -424,11 +522,12 @@ window.addEventListener("beforeunload", () => {
 });
 
 (async () => {
-  renderActivity();
+  renderBindCode();
   renderDevices();
   renderPairingRequests();
-  renderHeader();
+  renderStatus();
   setConnectionState(false, "Starting");
+  await loadServerAddress();
   await listen("bridge:event", (event) => {
     void handleBridgeEvent(event);
   });

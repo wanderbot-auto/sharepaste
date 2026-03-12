@@ -28,6 +28,7 @@
     "desktop:macos:dev": "swift run --package-path apps/desktop-macos sharepaste-desktop",
     "desktop:macos:build": "swift build --package-path apps/desktop-macos -c release",
     "desktop:windows:dev": "cargo run --manifest-path apps/desktop-windows/src-tauri/Cargo.toml",
-    "desktop:windows:build": "cargo build --manifest-path apps/desktop-windows/src-tauri/Cargo.toml --release"
+    "desktop:windows:build": "cargo build --manifest-path apps/desktop-windows/src-tauri/Cargo.toml --release",
+    "desktop:windows:icons": "python scripts/build-windows-web-icons.py"
   }
 }

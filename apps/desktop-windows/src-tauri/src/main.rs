@@ -18,6 +18,7 @@ use tauri::{
   api::notification::Notification, AppHandle, CustomMenuItem, Manager, State, SystemTray, SystemTrayEvent, SystemTrayMenu,
   WindowEvent
 };
+use window_vibrancy::{apply_acrylic, apply_mica};
 
 #[derive(Clone)]
 struct BridgeSettings {
@@ -98,9 +99,21 @@ fn main() {
   let tray_menu = SystemTrayMenu::new().add_item(show).add_item(hide).add_item(quit);
 
   tauri::Builder::default()
+    .setup(|app| {
+      #[cfg(target_os = "windows")]
+      {
+        let window = app.get_window("main").unwrap();
+        if let Err(_) = apply_mica(&window, None) {
+            let _ = apply_acrylic(&window, Some((18, 18, 18, 0)));
+        }
+      }
+      Ok(())
+    })
     .manage(AppState::default())
     .invoke_handler(tauri::generate_handler![
       bridge_request,
+      get_server_address,
+      set_server_address,
       read_clipboard_snapshot,
       write_text_clipboard,
       write_image_clipboard,
@@ -297,6 +310,14 @@ fn ensure_bridge<'a>(app: &AppHandle, bridge_guard: &'a mut Option<BridgeProcess
   bridge_guard.as_mut().ok_or_else(|| "runtime bridge unavailable".to_string())
 }
 
+fn stop_bridge_process(bridge_guard: &mut Option<BridgeProcess>) {
+  if let Some(mut bridge) = bridge_guard.take() {
+    let _ = bridge.send("shutdown".to_string(), Value::Null);
+    let _ = bridge.child.kill();
+    let _ = bridge.child.wait();
+  }
+}
+
 #[tauri::command]
 fn bridge_request(app: AppHandle, state: State<'_, AppState>, method: String, params: Value) -> Result<Value, String> {
   let settings = state.settings.lock().map_err(|_| "settings lock poisoned".to_string())?.clone();
@@ -309,6 +330,30 @@ fn bridge_request(app: AppHandle, state: State<'_, AppState>, method: String, pa
   receiver
     .recv_timeout(Duration::from_secs(60))
     .map_err(|_| "runtime bridge timed out".to_string())?
+}
+
+#[tauri::command]
+fn get_server_address(state: State<'_, AppState>) -> Result<String, String> {
+  let settings = state.settings.lock().map_err(|_| "settings lock poisoned".to_string())?;
+  Ok(settings.server.clone())
+}
+
+#[tauri::command]
+fn set_server_address(state: State<'_, AppState>, server: String) -> Result<String, String> {
+  let trimmed = server.trim();
+  if trimmed.is_empty() {
+    return Err("server address cannot be empty".to_string());
+  }
+
+  {
+    let mut settings = state.settings.lock().map_err(|_| "settings lock poisoned".to_string())?;
+    settings.server = trimmed.to_string();
+  }
+
+  let mut bridge_guard = state.bridge.lock().map_err(|_| "bridge lock poisoned".to_string())?;
+  stop_bridge_process(&mut bridge_guard);
+
+  Ok(trimmed.to_string())
 }
 
 fn sha_hex(bytes: &[u8]) -> String {
@@ -442,9 +487,7 @@ fn show_main_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn quit_app(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
   if let Ok(mut bridge_guard) = state.bridge.lock() {
-    if let Some(bridge) = bridge_guard.as_mut() {
-      let _ = bridge.send("shutdown".to_string(), Value::Null);
-    }
+    stop_bridge_process(&mut bridge_guard);
   }
 
   Notification::new(&app.config().tauri.bundle.identifier)

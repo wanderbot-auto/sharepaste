@@ -27,6 +27,9 @@ One-click launch on Windows:
 .\scripts\start-windows-client.cmd
 ```
 
+The launcher auto-loads the MSVC developer environment from Visual Studio / Build Tools when needed, so `link.exe` does not need to already be on `PATH`.
+You still need the Visual C++ toolchain and the Windows 10/11 SDK installed through Visual Studio Installer.
+
 PowerShell entrypoint with optional overrides:
 
 ```powershell
@@ -49,6 +52,12 @@ SHAREPASTE_REPO_ROOT=<absolute repo path>
 
 ```bash
 npm run desktop:windows:build
+```
+
+Regenerate the committed desktop and web icon pack:
+
+```bash
+npm run desktop:windows:icons
 ```
 
 ## Notes

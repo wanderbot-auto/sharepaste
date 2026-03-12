@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="flow" x1="54" y1="198" x2="188" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C5FFF6" />
+      <stop offset="0.52" stop-color="#9BE4FF" />
+      <stop offset="1" stop-color="#51A2FF" />
+    </linearGradient>
+  </defs>
+
+  <path
+    d="M60 196C48 180 46 159 54 143C64 124 84 114 106 114C127 114 144 122 158 135C171 147 182 154 193 151C206 146 214 135 214 118C214 97 203 80 183 63"
+    stroke="#082131"
+    stroke-opacity="0.26"
+    stroke-width="42"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M60 196C48 180 46 159 54 143C64 124 84 114 106 114C127 114 144 122 158 135C171 147 182 154 193 151C206 146 214 135 214 118C214 97 203 80 183 63"
+    stroke="url(#flow)"
+    stroke-width="34"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="60" cy="196" r="18" fill="#C5FFF6" />
+  <circle cx="183" cy="63" r="16" fill="#51A2FF" />
+</svg>

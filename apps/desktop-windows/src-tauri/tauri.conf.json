@@ -4,7 +4,8 @@
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
     "devPath": "../web",
-    "distDir": "../web"
+    "distDir": "../web",
+    "withGlobalTauri": true
   },
   "package": {
     "productName": "SharePaste Windows",
@@ -19,15 +20,26 @@
     },
     "bundle": {
       "active": false,
-      "identifier": "dev.sharepaste.desktop.windows"
+      "identifier": "dev.sharepaste.desktop.windows",
+      "icon": [
+        "icons/icon.png",
+        "icons/icon.ico"
+      ]
     },
     "windows": [
       {
         "title": "SharePaste",
-        "width": 1240,
+        "width": 520,
         "height": 860,
-        "resizable": true,
-        "fullscreen": false
+        "minWidth": 520,
+        "minHeight": 860,
+        "maxWidth": 520,
+        "maxHeight": 860,
+        "resizable": false,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": true,
+        "center": true
       }
     ],
     "security": {

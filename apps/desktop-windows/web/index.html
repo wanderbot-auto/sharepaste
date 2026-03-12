@@ -3,167 +3,172 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SharePaste for Windows</title>
+    <meta name="theme-color" content="transparent" />
+    <title>SharePaste</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">SP</div>
-          <div>
-            <p class="eyebrow">Windows Client</p>
-            <h1>SharePaste</h1>
+    <div class="app-shell">
+      <header class="titlebar" data-tauri-drag-region>
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="brand-copy">
+            <div class="brand-title">SharePaste</div>
+            <div class="brand-subtitle">Companion for Windows</div>
           </div>
         </div>
-        <div class="status-panel">
-          <span id="connectionDot" class="status-dot"></span>
-          <div>
-            <p class="eyebrow">Realtime</p>
-            <strong id="connectionLabel">Starting…</strong>
-          </div>
+        <div class="titlebar-actions no-drag">
+          <button class="window-button" id="hideWindowButton" type="button" aria-label="Hide window" title="Hide">
+            <svg class="symbol" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 12h12"></path>
+            </svg>
+          </button>
+          <button class="window-button danger" id="quitAppButton" type="button" aria-label="Close SharePaste" title="Close">
+            <svg class="symbol" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 7l10 10"></path>
+              <path d="M17 7 7 17"></path>
+            </svg>
+          </button>
         </div>
-        <div class="sidebar-copy">
-          <p>Desktop-first clipboard sync with tray background behavior and native Windows clipboard integration.</p>
-        </div>
-        <div class="sidebar-actions">
-          <button id="startSyncButton" class="primary">Start Sync</button>
-          <button id="stopSyncButton" class="secondary">Stop Sync</button>
-          <button id="hideWindowButton" class="ghost">Hide To Tray</button>
-        </div>
-      </aside>
+      </header>
 
-      <main class="content">
-        <section class="hero">
-          <div>
-            <p class="eyebrow">Current Device</p>
-            <h2 id="deviceHeadline">Not initialized</h2>
-            <p id="deviceSubline" class="muted">Initialize a device or recover an existing group to start syncing.</p>
-          </div>
-          <div class="hero-actions">
-            <button id="refreshDevicesButton" class="secondary">Refresh Devices</button>
-            <button id="refreshPolicyButton" class="secondary">Refresh Policy</button>
-          </div>
-        </section>
-
-        <section class="grid">
-          <article class="card card-setup">
-            <div class="card-header">
+      <div class="workspace">
+        <main class="main-column">
+          <section class="surface hero-panel">
+            <div class="hero-header">
+              <div class="status-line">
+                <span class="status-dot" id="connectionDot"></span>
+                <span class="status-label" id="connectionLabel">Starting</span>
+                <span class="status-badge" id="heroStateBadge">Setup required</span>
+              </div>
+              <button class="primary-button sync-button" id="syncToggleButton" type="button">
+                <svg class="symbol" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 6.5v11l9-5.5-9-5.5Z"></path>
+                </svg>
+                <span id="syncToggleLabel">Start Sync</span>
+              </button>
+            </div>
+            <div class="hero-body">
               <div>
-                <p class="eyebrow">Setup</p>
-                <h3>Registration & Recovery</h3>
+                <h1 id="deviceHeadline">SharePaste</h1>
+                <p id="deviceSubline">Set up this PC to start syncing clipboard content.</p>
               </div>
             </div>
-            <label>
-              Device Name
-              <input id="deviceNameInput" type="text" placeholder="My Windows PC" />
-            </label>
-            <div class="row">
-              <button id="initializeButton" class="primary">Initialize Device</button>
-              <button id="inspectStateButton" class="secondary">Inspect Local State</button>
-            </div>
-            <label>
-              Recovery Phrase
-              <textarea id="recoveryPhraseInput" rows="3" placeholder="Paste your recovery phrase"></textarea>
-            </label>
-            <button id="recoverButton" class="secondary">Recover Group</button>
-            <div class="recovery-box">
-              <p class="eyebrow">Recovery Phrase</p>
-              <code id="recoveryPhraseValue">Not available</code>
-            </div>
-          </article>
+          </section>
 
-          <article class="card">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Pairing</p>
-                <h3>Bind Another Device</h3>
+          <section class="top-grid">
+            <section class="surface compact-panel bind-panel">
+              <div class="panel-head">
+                <div>
+                  <div class="panel-kicker">Pairing</div>
+                  <h2>Bind code</h2>
+                </div>
+                <button class="ghost-button" id="generateBindCodeButton" type="button">Refresh</button>
               </div>
-            </div>
-            <div class="bind-code">
-              <span id="bindCodeValue">------</span>
-            </div>
-            <div class="row">
-              <button id="generateBindCodeButton" class="primary">Generate Bind Code</button>
-            </div>
-            <label>
-              Enter Bind Code
-              <input id="bindRequestInput" type="text" maxlength="6" placeholder="123456" />
-            </label>
-            <button id="requestBindButton" class="secondary">Request Bind</button>
-            <div class="pending-list">
-              <div class="card-subheader">
-                <p class="eyebrow">Pending Requests</p>
+              <div class="code-shell">
+                <div class="code-caption">Current code</div>
+                <div class="bind-code" id="bindCodeValue">------</div>
               </div>
-              <div id="pairingRequestsList" class="stack muted">No pending requests.</div>
-            </div>
-          </article>
+              <label class="field-block">
+                <span>Join with code</span>
+                <div class="inline-field">
+                  <input id="bindRequestInput" type="text" placeholder="Enter bind code" />
+                  <button class="ghost-button accent" id="requestBindButton" type="button">Join</button>
+                </div>
+              </label>
+              <div class="inline-requests" id="pairingRequestsInline" hidden>
+                <div class="inline-title">Pending approvals</div>
+                <div class="inline-request-list" id="pairingRequestsList"></div>
+              </div>
+            </section>
 
-          <article class="card">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Devices</p>
-                <h3>Group Members</h3>
+            <section class="surface list-panel">
+              <div class="panel-head compact-head">
+                <div>
+                  <div class="panel-kicker">Connected</div>
+                  <h2>Devices</h2>
+                </div>
+                <span class="count-badge" id="devicesMeta">0</span>
               </div>
-            </div>
-            <div id="devicesList" class="stack muted">No devices loaded.</div>
-          </article>
+              <div class="list-stack" id="devicesList"></div>
+            </section>
+          </section>
 
-          <article class="card">
-            <div class="card-header">
+          <section class="surface advanced-panel">
+            <div class="panel-head settings-head">
               <div>
-                <p class="eyebrow">Policy</p>
-                <h3>Sharing Rules</h3>
+                <div class="panel-kicker">Settings</div>
+                <h2>Device and policy</h2>
               </div>
             </div>
-            <label class="toggle">
-              <input id="allowTextInput" type="checkbox" checked />
-              <span>Allow Text</span>
-            </label>
-            <label class="toggle">
-              <input id="allowImageInput" type="checkbox" checked />
-              <span>Allow Image</span>
-            </label>
-            <label class="toggle">
-              <input id="allowFileInput" type="checkbox" checked />
-              <span>Allow File</span>
-            </label>
-            <label>
-              Max File Size (bytes)
-              <input id="maxFileSizeInput" type="number" min="1" step="1" value="3145728" />
-            </label>
-            <button id="savePolicyButton" class="primary">Save Policy</button>
-          </article>
+            <div class="advanced-body">
+              <div class="settings-stack">
+                <section class="section-card settings-section">
+                  <div class="settings-card-head">
+                    <div>
+                      <div class="section-title">This device</div>
+                      <div class="section-subtitle">Configure the local node and bridge target.</div>
+                    </div>
+                  </div>
+                  <div class="device-grid">
+                    <label class="field-block">
+                      <span>Device name</span>
+                      <input id="deviceNameInput" type="text" placeholder="My Windows PC" />
+                    </label>
+                    <label class="field-block">
+                      <span>Server address</span>
+                      <div class="inline-field inline-field-stretch">
+                        <input id="serverAddressInput" type="text" placeholder="127.0.0.1:50052" />
+                        <button class="ghost-button" id="saveServerButton" type="button">Apply</button>
+                      </div>
+                    </label>
+                    <div class="panel-actions action-row">
+                      <button class="primary-button small" id="initializeButton" type="button">Initialize</button>
+                      <button class="ghost-button" id="recoverButton" type="button">Recover</button>
+                    </div>
+                    <label class="field-block recovery-field">
+                      <span>Recovery phrase</span>
+                      <textarea id="recoveryPhraseInput" rows="3" placeholder="Paste phrase to restore this device"></textarea>
+                    </label>
+                  </div>
+                </section>
 
-          <article class="card">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Clipboard</p>
-                <h3>Manual Text Send</h3>
+                <section class="section-card settings-section">
+                  <div class="settings-card-head">
+                    <div>
+                      <div class="section-title">Clipboard policy</div>
+                      <div class="section-subtitle">Choose which payload types this companion can sync.</div>
+                    </div>
+                  </div>
+                  <div class="policy-grid">
+                    <div class="toggle-grid">
+                      <label class="toggle-tile">
+                        <input id="allowTextInput" type="checkbox" />
+                        <span>Text</span>
+                      </label>
+                      <label class="toggle-tile">
+                        <input id="allowImageInput" type="checkbox" />
+                        <span>Images</span>
+                      </label>
+                      <label class="toggle-tile">
+                        <input id="allowFileInput" type="checkbox" />
+                        <span>Files</span>
+                      </label>
+                    </div>
+                    <div class="policy-footer">
+                      <label class="field-block">
+                        <span>Max file size (MB)</span>
+                        <input id="maxFileSizeInput" type="number" min="1" step="1" />
+                      </label>
+                    </div>
+                  </div>
+                </section>
               </div>
             </div>
-            <label>
-              Text Payload
-              <textarea id="manualTextInput" rows="5" placeholder="Type text to send immediately"></textarea>
-            </label>
-            <button id="sendTextButton" class="primary">Send Text</button>
-            <p class="muted small">Text and image clipboard polling continue while the app is hidden to tray.</p>
-          </article>
-
-          <article class="card card-activity">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Activity</p>
-                <h3>Runtime Events</h3>
-              </div>
-              <button id="clearActivityButton" class="ghost">Clear</button>
-            </div>
-            <div id="activityFeed" class="activity-feed muted">No activity yet.</div>
-          </article>
-        </section>
-      </main>
+          </section>
+        </main>
+      </div>
     </div>
-
-    <script src="./main.js"></script>
+    <script src="main.js"></script>
   </body>
 </html>
