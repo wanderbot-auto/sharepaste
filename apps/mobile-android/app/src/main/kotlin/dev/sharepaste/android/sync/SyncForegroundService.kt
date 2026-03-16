@@ -37,6 +37,7 @@ class SyncForegroundService : Service() {
         createChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
         serviceScope.launch {
+            repository().bootstrap(startSyncServiceIfEnabled = false)
             repository().runSyncLoop()
         }
         return START_STICKY

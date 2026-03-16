@@ -25,6 +25,8 @@
     "client:build": "npm run -w @sharepaste/client build",
     "client:test": "npm run -w @sharepaste/client test",
     "client:lint": "npm run -w @sharepaste/client lint",
+    "android:test": "gradle -p apps/mobile-android testDebugUnitTest",
+    "android:build": "gradle -p apps/mobile-android assembleDebug",
     "desktop:macos:dev": "swift run --package-path apps/desktop-macos sharepaste-desktop",
     "desktop:macos:build": "swift build --package-path apps/desktop-macos -c release",
     "desktop:windows:dev": "cargo run --manifest-path apps/desktop-windows/src-tauri/Cargo.toml",

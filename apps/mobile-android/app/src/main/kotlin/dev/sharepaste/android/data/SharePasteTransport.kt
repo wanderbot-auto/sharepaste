@@ -101,6 +101,24 @@ class SharePasteTransport {
         }
     }
 
+    suspend fun renameDevice(server: String, deviceId: String, newName: String): DeviceSummary = withChannel(server) { channel ->
+        val device = DeviceServiceGrpc.newBlockingStub(channel)
+            .withDeadlineAfter(5, TimeUnit.SECONDS)
+            .renameDevice(
+                Sharepaste.RenameDeviceRequest.newBuilder()
+                    .setDeviceId(deviceId)
+                    .setNewName(newName)
+                    .build()
+            )
+            .device
+        DeviceSummary(
+            deviceId = device.deviceId,
+            name = device.name,
+            platform = device.platform,
+            groupId = device.groupId
+        )
+    }
+
     suspend fun removeDevice(server: String, requestDeviceId: String, targetDeviceId: String): Boolean = withChannel(server) { channel ->
         DeviceServiceGrpc.newBlockingStub(channel)
             .withDeadlineAfter(5, TimeUnit.SECONDS)

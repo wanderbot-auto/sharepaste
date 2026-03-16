@@ -115,7 +115,7 @@ SHAREPASTE_INTEGRATION=1 SHAREPASTE_STORAGE_MODE=durable npm run server:test
 
 Current tests cover binding, policy conflicts, offline TTL handling, dedup/loop suppression, ring-buffer history, and cryptographic envelope round trips.
 
-Android unit tests live under `apps/mobile-android/app/src/test`, but they are not currently wired into the root `npm test` command.
+Android unit tests live under `apps/mobile-android/app/src/test`. You can run them from the repo root with `npm run android:test`, but they are not currently wired into the aggregate `npm test` command.
 
 ## Release
 
@@ -175,3 +175,10 @@ Current module status:
 - Foreground clipboard text observation; background clipboard auto-read is intentionally not attempted on modern Android
 
 Open locally in Android Studio using `apps/mobile-android`.
+
+From the repo root you can also use:
+
+```bash
+npm run android:test
+npm run android:build
+```

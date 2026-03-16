@@ -47,6 +47,14 @@ class IncomingItemStore(private val context: Context) {
         File(filePath)
     )
 
+    fun clear() {
+        baseDir.listFiles()?.forEach { file ->
+            if (file.isFile) {
+                file.delete()
+            }
+        }
+    }
+
     private fun extensionForMime(mime: String, kind: PayloadKind): String {
         return when (mime.lowercase()) {
             "image/png" -> ".png"

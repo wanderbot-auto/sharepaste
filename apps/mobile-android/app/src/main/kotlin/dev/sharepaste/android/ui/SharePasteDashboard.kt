@@ -26,9 +26,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Link
@@ -56,6 +58,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,7 +81,6 @@ import dev.sharepaste.android.ui.theme.SharePasteOffline
 import dev.sharepaste.android.ui.theme.SharePastePrimary
 import dev.sharepaste.android.ui.theme.SharePasteSuccess
 import dev.sharepaste.android.ui.theme.SharePasteSurface
-import dev.sharepaste.android.ui.theme.SharePasteTextPrimary
 import dev.sharepaste.android.ui.theme.SharePasteTextSecondary
 import dev.sharepaste.android.ui.theme.SharePasteWarning
 
@@ -100,10 +103,12 @@ fun SharePasteRoute(
         onPolicyAllowImageChanged = viewModel::onPolicyAllowImageChanged,
         onPolicyAllowFileChanged = viewModel::onPolicyAllowFileChanged,
         onPolicyMaxFileSizeMbChanged = viewModel::onPolicyMaxFileSizeMbChanged,
+        onClearLocalState = viewModel::clearLocalState,
         onInitialize = viewModel::initializeDevice,
         onRecover = viewModel::recoverGroup,
         onRefresh = viewModel::refreshStatus,
         onLoadDevices = viewModel::loadDevices,
+        onRenameDevice = viewModel::renameDevice,
         onRemoveDevice = viewModel::removeDevice,
         onLoadPolicy = viewModel::loadPolicy,
         onSavePolicy = viewModel::savePolicy,
@@ -133,10 +138,12 @@ private fun SharePasteDashboard(
     onPolicyAllowImageChanged: (Boolean) -> Unit,
     onPolicyAllowFileChanged: (Boolean) -> Unit,
     onPolicyMaxFileSizeMbChanged: (Int) -> Unit,
+    onClearLocalState: () -> Unit,
     onInitialize: () -> Unit,
     onRecover: () -> Unit,
     onRefresh: () -> Unit,
     onLoadDevices: () -> Unit,
+    onRenameDevice: (String, String) -> Unit,
     onRemoveDevice: (String) -> Unit,
     onLoadPolicy: () -> Unit,
     onSavePolicy: () -> Unit,
@@ -184,10 +191,16 @@ private fun SharePasteDashboard(
                 onServerChanged = onServerChanged,
                 onDeviceNameChanged = onDeviceNameChanged,
                 onRecoveryPhraseChanged = onRecoveryPhraseChanged,
+                onClearLocalState = onClearLocalState,
                 onInitialize = onInitialize,
                 onRecover = onRecover
             )
-            DevicesCard(state = state, onLoadDevices = onLoadDevices, onRemoveDevice = onRemoveDevice)
+            DevicesCard(
+                state = state,
+                onLoadDevices = onLoadDevices,
+                onRenameDevice = onRenameDevice,
+                onRemoveDevice = onRemoveDevice
+            )
             PolicyCard(
                 state = state,
                 policyMb = policyMb,
@@ -340,6 +353,7 @@ private fun SetupCard(
     onServerChanged: (String) -> Unit,
     onDeviceNameChanged: (String) -> Unit,
     onRecoveryPhraseChanged: (String) -> Unit,
+    onClearLocalState: () -> Unit,
     onInitialize: () -> Unit,
     onRecover: () -> Unit
 ) {
@@ -392,14 +406,38 @@ private fun SetupCard(
         }
         if (state.recoveryPhrase.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
-            Text("Saved recovery phrase", style = MaterialTheme.typography.labelLarge, color = SharePasteTextSecondary)
-            Text(state.recoveryPhrase, style = MaterialTheme.typography.bodyMedium, color = SharePasteTextPrimary)
+            Text(
+                "Recovery phrase saved locally. Keep it offline and do not leave it visible on-screen.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = SharePasteTextSecondary
+            )
+        }
+        if (state.isBootstrapped) {
+            Spacer(Modifier.height(12.dp))
+            FilledTonalButton(
+                onClick = onClearLocalState,
+                enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = SharePasteWarning.copy(alpha = 0.12f),
+                    contentColor = SharePasteWarning
+                )
+            ) {
+                Icon(Icons.Rounded.Delete, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Clear Local State")
+            }
         }
     }
 }
 
 @Composable
-private fun DevicesCard(state: AppUiState, onLoadDevices: () -> Unit, onRemoveDevice: (String) -> Unit) {
+private fun DevicesCard(
+    state: AppUiState,
+    onLoadDevices: () -> Unit,
+    onRenameDevice: (String, String) -> Unit,
+    onRemoveDevice: (String) -> Unit
+) {
     DashboardCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Connected Devices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -412,29 +450,84 @@ private fun DevicesCard(state: AppUiState, onLoadDevices: () -> Unit, onRemoveDe
             Text("No devices loaded", color = SharePasteTextSecondary)
         } else {
             state.devices.forEachIndexed { index, device ->
+                var isEditing by remember(device.deviceId) { mutableStateOf(false) }
+                var renameValue by remember(device.deviceId, device.name) { mutableStateOf(device.name) }
                 if (index > 0) HorizontalDivider(color = SharePasteDivider)
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 10.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(SharePastePrimary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Rounded.PowerSettingsNew, contentDescription = null, tint = SharePastePrimary)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(SharePastePrimary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Rounded.PowerSettingsNew, contentDescription = null, tint = SharePastePrimary)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(device.name, fontWeight = FontWeight.SemiBold)
+                            Text(device.platform, color = SharePasteTextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        IconButton(
+                            onClick = {
+                                renameValue = device.name
+                                isEditing = !isEditing
+                            },
+                            enabled = !state.busy
+                        ) {
+                            Icon(
+                                if (isEditing) Icons.Rounded.Close else Icons.Rounded.Edit,
+                                contentDescription = if (isEditing) "Cancel rename" else "Rename device",
+                                tint = SharePasteTextSecondary
+                            )
+                        }
+                        IconButton(onClick = { onRemoveDevice(device.deviceId) }, enabled = !state.busy) {
+                            Icon(Icons.Rounded.Delete, contentDescription = "Remove device", tint = SharePasteTextSecondary)
+                        }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(device.name, fontWeight = FontWeight.SemiBold)
-                        Text(device.platform, color = SharePasteTextSecondary, style = MaterialTheme.typography.bodySmall)
-                    }
-                    IconButton(onClick = { onRemoveDevice(device.deviceId) }) {
-                        Icon(Icons.Rounded.Delete, contentDescription = "Remove device", tint = SharePasteTextSecondary)
+
+                    if (isEditing) {
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = renameValue,
+                            onValueChange = { renameValue = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Rename Device") },
+                            singleLine = true,
+                            enabled = !state.busy
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = {
+                                    renameValue = device.name
+                                    isEditing = false
+                                },
+                                enabled = !state.busy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancel")
+                            }
+                            Button(
+                                onClick = {
+                                    onRenameDevice(device.deviceId, renameValue)
+                                    isEditing = false
+                                },
+                                enabled = renameValue.trim().isNotBlank() && renameValue.trim() != device.name && !state.busy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Rounded.Save, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Save Name")
+                            }
+                        }
                     }
                 }
             }

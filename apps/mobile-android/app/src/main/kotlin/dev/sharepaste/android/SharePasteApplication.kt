@@ -1,6 +1,7 @@
 package dev.sharepaste.android
 
 import android.app.Application
+import dev.sharepaste.android.data.InboxStore
 import dev.sharepaste.android.data.IncomingItemStore
 import dev.sharepaste.android.data.SessionStore
 import dev.sharepaste.android.data.SharePasteCrypto
@@ -16,6 +17,7 @@ class SharePasteApplication : Application() {
         repository = SharePasteRepository(
             appContext = applicationContext,
             sessionStore = SessionStore(applicationContext),
+            inboxStore = InboxStore(applicationContext),
             transport = SharePasteTransport(),
             crypto = SharePasteCrypto(),
             incomingItemStore = IncomingItemStore(applicationContext)

@@ -37,6 +37,7 @@ import kotlinx.coroutines.sync.withLock
 class SharePasteRepository(
     private val appContext: Context,
     private val sessionStore: SessionStore,
+    private val inboxStore: InboxStore,
     private val transport: SharePasteTransport,
     private val crypto: SharePasteCrypto,
     private val incomingItemStore: IncomingItemStore,
@@ -89,8 +90,13 @@ class SharePasteRepository(
         }
     }
 
-    suspend fun bootstrap() {
+    suspend fun bootstrap(startSyncServiceIfEnabled: Boolean = true) {
         currentSession = sessionStore.load()
+        val storedInbox = inboxStore.load()
+        val inbox = storedInbox.filter(::isInboxItemAvailable)
+        if (inbox.size != storedInbox.size) {
+            inboxStore.save(inbox)
+        }
         currentSession?.let { session ->
             _uiState.value = _uiState.value.copy(
                 server = session.server,
@@ -98,11 +104,14 @@ class SharePasteRepository(
                 deviceId = session.deviceId,
                 groupId = session.groupId,
                 recoveryPhrase = session.recoveryPhrase,
+                inbox = inbox,
                 syncRunning = session.syncEnabled
             )
-            if (session.syncEnabled) {
+            if (startSyncServiceIfEnabled && session.syncEnabled) {
                 SyncForegroundService.start(appContext)
             }
+        } ?: run {
+            _uiState.value = _uiState.value.copy(inbox = inbox)
         }
     }
 
@@ -164,6 +173,24 @@ class SharePasteRepository(
 
     fun clearMessage() {
         _uiState.value = _uiState.value.copy(message = null)
+    }
+
+    suspend fun clearLocalState() = runBusyAction {
+        stopSyncLoop()
+        SyncForegroundService.stop(appContext)
+        sessionStore.clear()
+        inboxStore.clear()
+        incomingItemStore.clear()
+        currentSession = null
+        _uiState.value = AppUiState(
+            server = _uiState.value.server,
+            deviceName = _uiState.value.deviceName,
+            recoveryPhraseInput = "",
+            bindInputCode = "",
+            manualTextInput = ""
+        ).copy(
+            message = UserMessage("Local State Cleared", "Device session and inbox were removed from this Android client.", MessageTone.SUCCESS)
+        )
     }
 
     suspend fun initializeDevice() = runBusyAction {
@@ -230,6 +257,22 @@ class SharePasteRepository(
         val devices = transport.listDevices(session.server, session.deviceId)
         _uiState.value = _uiState.value.copy(devices = devices)
         showMessage("Devices", "Loaded ${devices.size} devices.", MessageTone.INFO)
+    }
+
+    suspend fun renameDevice(targetDeviceId: String, newName: String) = runBusyAction {
+        val session = requireSession()
+        val trimmedName = newName.trim()
+        require(trimmedName.isNotBlank()) { "Device name cannot be empty" }
+        transport.renameDevice(session.server, targetDeviceId, trimmedName)
+        val devices = transport.listDevices(session.server, session.deviceId)
+        val nextSession = if (targetDeviceId == session.deviceId) {
+            session.copy(deviceName = trimmedName)
+        } else {
+            session
+        }
+        saveSession(nextSession)
+        _uiState.value = _uiState.value.copy(devices = devices)
+        showMessage("Device Renamed", "Renamed $targetDeviceId to $trimmedName.", MessageTone.SUCCESS)
     }
 
     suspend fun removeDevice(targetDeviceId: String) = runBusyAction {
@@ -565,7 +608,9 @@ class SharePasteRepository(
             ignoreNextClipboardText = text
             clipboardManager.setPrimaryClip(ClipData.newPlainText("SharePaste", text))
         }
-        _uiState.value = _uiState.value.copy(inbox = listOf(inboxItem) + _uiState.value.inbox.take(19))
+        val nextInbox = listOf(inboxItem) + _uiState.value.inbox.filterNot { it.itemId == inboxItem.itemId }.take(19)
+        _uiState.value = _uiState.value.copy(inbox = nextInbox)
+        inboxStore.save(nextInbox)
     }
 
     private suspend fun sendPlaintext(kind: PayloadKind, mime: String, plaintext: ByteArray) {
@@ -626,6 +671,9 @@ class SharePasteRepository(
             else -> error.message ?: error.toString()
         }
     }
+
+    private fun isInboxItemAvailable(item: InboxItem): Boolean =
+        item.kind == PayloadKind.TEXT || item.filePath?.let { path -> java.io.File(path).exists() } == true
 
     private suspend fun saveSession(session: PersistedSession) {
         currentSession = session

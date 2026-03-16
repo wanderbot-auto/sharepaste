@@ -42,6 +42,10 @@ class SharePasteViewModel(application: Application) : AndroidViewModel(applicati
 
     fun clearMessage() = repository.clearMessage()
 
+    fun clearLocalState() {
+        viewModelScope.launch { repository.clearLocalState() }
+    }
+
     fun initializeDevice() {
         viewModelScope.launch { repository.initializeDevice() }
     }
@@ -52,6 +56,10 @@ class SharePasteViewModel(application: Application) : AndroidViewModel(applicati
 
     fun loadDevices() {
         viewModelScope.launch { repository.loadDevices() }
+    }
+
+    fun renameDevice(targetDeviceId: String, newName: String) {
+        viewModelScope.launch { repository.renameDevice(targetDeviceId, newName) }
     }
 
     fun removeDevice(targetDeviceId: String) {

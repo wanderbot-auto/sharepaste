@@ -8,6 +8,7 @@ enum class ConnectionState {
     CONNECTED
 }
 
+@Serializable
 enum class PayloadKind {
     TEXT,
     IMAGE,
@@ -97,6 +98,7 @@ data class PendingPairingRequest(
     val expiresAtUnix: Long = 0
 )
 
+@Serializable
 data class InboxItem(
     val itemId: String,
     val kind: PayloadKind,
