@@ -526,7 +526,7 @@ class SharePasteRepository(
                         )
                     }
 
-                    currentConnection.getAndSet(null)?.close()
+                    currentConnection.getAndSet(null)?.close?.invoke()
                     if (currentSession?.syncEnabled == true) {
                         delay(2000)
                     }
@@ -536,7 +536,7 @@ class SharePasteRepository(
     }
 
     suspend fun stopSyncLoop() {
-        currentConnection.getAndSet(null)?.close()
+        currentConnection.getAndSet(null)?.close?.invoke()
         syncJob?.cancel()
         syncJob = null
     }

@@ -1,8 +1,6 @@
-import com.google.protobuf.gradle.id
+import com.google.protobuf.gradle.ProtobufExtension
 import com.google.protobuf.gradle.proto
-import com.google.protobuf.gradle.protoc
-import com.google.protobuf.gradle.generateProtoTasks
-import com.google.protobuf.gradle.plugins
+import org.gradle.kotlin.dsl.configure
 
 plugins {
     id("com.android.application")
@@ -57,36 +55,36 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
-
     sourceSets {
         getByName("main") {
             proto {
-                srcDir("../../packages/proto")
+                srcDir("../../../packages/proto")
             }
         }
     }
 }
 
-protobuf {
+configure<ProtobufExtension> {
     protoc {
         artifact = "com.google.protobuf:protoc:4.28.2"
     }
     plugins {
-        id("grpc") {
+        create("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:1.68.1"
         }
     }
     generateProtoTasks {
-        all().forEach { task ->
-            task.builtins {
-                id("java") {
+        all().configureEach {
+            builtins {
+                maybeCreate("java").apply {
                     option("lite")
                 }
             }
-            task.plugins {
-                id("grpc") {
+            plugins {
+                maybeCreate("grpc").apply {
                     option("lite")
                 }
             }
@@ -117,9 +115,10 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("com.google.android.material:material:1.12.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     implementation("com.google.protobuf:protobuf-javalite:4.28.2")
     implementation("io.grpc:grpc-okhttp:1.68.1")

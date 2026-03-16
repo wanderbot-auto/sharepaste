@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
@@ -81,10 +83,10 @@ import dev.sharepaste.android.ui.theme.SharePasteOffline
 import dev.sharepaste.android.ui.theme.SharePastePrimary
 import dev.sharepaste.android.ui.theme.SharePasteSuccess
 import dev.sharepaste.android.ui.theme.SharePasteSurface
+import dev.sharepaste.android.ui.theme.SharePasteTextPrimary
 import dev.sharepaste.android.ui.theme.SharePasteTextSecondary
 import dev.sharepaste.android.ui.theme.SharePasteWarning
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SharePasteRoute(
     viewModel: SharePasteViewModel,
@@ -316,6 +318,7 @@ private fun StatusMeta(label: String, value: String) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickActionsCard(
     state: AppUiState,
@@ -758,7 +761,7 @@ private fun MessageCard(title: String, body: String, tone: MessageTone, onDismis
 }
 
 @Composable
-private fun DashboardCard(content: @Composable Column.() -> Unit) {
+private fun DashboardCard(content: @Composable ColumnScope.() -> Unit) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = SharePasteSurface),

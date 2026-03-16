@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import dev.sharepaste.android.MainActivity
 import dev.sharepaste.android.R
 import dev.sharepaste.android.SharePasteApplication
