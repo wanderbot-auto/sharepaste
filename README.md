@@ -19,6 +19,8 @@ This repository ships:
 - Implemented client surfaces today: CLI (`apps/client-cli`), macOS desktop (`apps/desktop-macos`), Windows desktop (`apps/desktop-windows`), and Android (`apps/mobile-android`)
 - Linux desktop remains a future shell placeholder
 - Root scripts currently cover the Node-based server/CLI flow plus native macOS and Windows shells; Android is maintained as a standalone Gradle project
+- Only `apps/client-cli` directly imports `packages/client-core` today; macOS and Windows reuse `@sharepaste/client` via bridges, while Android currently maintains a separate Kotlin runtime
+- `crates/client-runtime` is the long-term shared core target; convergence planning is tracked in `docs/architecture/client-runtime-convergence-plan-2026-03-16.md`
 
 ## Implemented v1 capabilities
 

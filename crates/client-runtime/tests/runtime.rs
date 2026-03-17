@@ -50,11 +50,27 @@ fn suppresses_duplicate_and_loopback_events() {
     let incoming = payload("same", ClipboardKind::Text, "dev-other", 5);
 
     assert!(engine.should_apply_incoming(&incoming).accepted);
-    assert!(!engine.should_apply_incoming(&incoming).accepted);
+    assert_eq!(
+        engine.should_apply_incoming(&incoming).reason,
+        Some("duplicate_item")
+    );
 
     let loopback = payload("new", ClipboardKind::Text, "dev-self", 5);
     assert_eq!(
         engine.should_apply_incoming(&loopback).reason,
         Some("loopback")
     );
+}
+
+#[test]
+fn generates_item_ids_with_expected_prefix_shape() {
+    let engine = SyncEngine::new("dev-self");
+    let item_id = engine.make_item_id(&[1, 2, 3], 1_700_000_000);
+    let parts: Vec<_> = item_id.split('_').collect();
+
+    assert_eq!(parts.len(), 3);
+    assert_eq!(parts[0], "item");
+    assert_eq!(parts[1].len(), 16);
+    assert!(parts[1].chars().all(|ch| ch.is_ascii_hexdigit() && ch.is_ascii_lowercase() || ch.is_ascii_digit()));
+    assert_eq!(parts[2].len(), 6);
 }

@@ -211,6 +211,16 @@ impl CryptoRuntime {
         Ok(encode_base64url(serde_json::to_vec(&sealed)?))
     }
 
+    pub fn seal_group_key_for_device_pem(
+        &self,
+        group_key: &[u8],
+        recipient_wrap_public_key_pem: &str,
+    ) -> Result<String, CryptoError> {
+        let recipient_wrap_public_key =
+            self.wrap_public_key_from_pem(recipient_wrap_public_key_pem)?;
+        self.seal_group_key_for_device(group_key, &recipient_wrap_public_key)
+    }
+
     pub fn unseal_group_key_for_device(
         &self,
         sealed: &str,
@@ -232,6 +242,16 @@ impl CryptoRuntime {
         cipher
             .decrypt(Nonce::from_slice(&nonce), ciphertext.as_ref())
             .map_err(|_| CryptoError::Aead)
+    }
+
+    pub fn unseal_group_key_for_device_pem(
+        &self,
+        sealed: &str,
+        recipient_wrap_private_key_pem: &str,
+    ) -> Result<Vec<u8>, CryptoError> {
+        let recipient_wrap_private_key =
+            self.wrap_private_key_from_pem(recipient_wrap_private_key_pem)?;
+        self.unseal_group_key_for_device(sealed, &recipient_wrap_private_key)
     }
 
     pub fn sign_public_key_to_pem(&self, raw_key: &str) -> Result<String, CryptoError> {

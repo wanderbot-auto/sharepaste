@@ -1,11 +1,22 @@
-# SharePaste 当前方案设计梳理与汇报（2026-03-11 更新）
+# SharePaste 当前方案设计梳理与汇报（2026-03-16 更新）
 
 ## 1. 文档目的与范围
 - 目的：基于现有设计文档与当前代码实现，给出 SharePaste v0.1 内测阶段的“当前方案全景”和“落地状态”。
 - 范围：`server`、`client`、`macos`、`android`、`proto`、`docs/pre-dev`、`docs/ops`。
 - 基线时间：
   - 设计文档基线：2026-03-07
-  - 本次梳理时间：2026-03-11
+  - 本次梳理时间：2026-03-16
+
+## 2.1 2026-03-16 收敛补充结论
+
+- 当前不能视为“多个客户端已经共用一个 `client-core`”。
+- `packages/client-core` 仍是 TypeScript 参考实现，直接使用方只有 `apps/client-cli`。
+- `apps/desktop-macos` 与 `apps/desktop-windows` 当前通过 `@sharepaste/client` 进程桥接复用业务逻辑。
+- `apps/mobile-android` 仍保留独立 Kotlin runtime，实现了自己的模型、sync、crypto、transport 与 session 持久化。
+- `crates/client-runtime` 是应收敛的平台无关核心方向，适合承载共享业务规则，但不应吞并平台适配层与 UI。
+- 对应执行文档：
+  - `docs/architecture/client-runtime-convergence-plan-2026-03-16.md`
+  - `docs/checklists/2026-03-16-client-runtime-convergence.md`
 
 ## 2. 输入材料
 - 产品与技术基线：

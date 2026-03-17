@@ -139,9 +139,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             group_key,
             recipient_wrap_public_key_pem,
         } => {
-            let raw_identity = crypto.wrap_public_key_from_pem(&recipient_wrap_public_key_pem)?;
             let group_key = decode_base64url(&group_key)?;
-            let sealed = crypto.seal_group_key_for_device(&group_key, &raw_identity)?;
+            let sealed = crypto.seal_group_key_for_device_pem(&group_key, &recipient_wrap_public_key_pem)?;
             write_json(&Response {
                 ok: true,
                 result: SealedResult { sealed },
@@ -151,8 +150,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             sealed,
             recipient_wrap_private_key_pem,
         } => {
-            let raw_identity = crypto.wrap_private_key_from_pem(&recipient_wrap_private_key_pem)?;
-            let plaintext = crypto.unseal_group_key_for_device(&sealed, &raw_identity)?;
+            let plaintext = crypto.unseal_group_key_for_device_pem(&sealed, &recipient_wrap_private_key_pem)?;
             write_json(&Response {
                 ok: true,
                 result: BytesResult {

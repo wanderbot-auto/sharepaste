@@ -47,12 +47,24 @@ scripts/              Local developer entrypoints
 4. Keep per-platform shell code in `apps/desktop-*` and `apps/mobile-*`.
 5. Keep protocol evolution centralized in `packages/proto`.
 
+Detailed convergence plan:
+
+- `docs/architecture/client-runtime-convergence-plan-2026-03-16.md`
+- `docs/checklists/2026-03-16-client-runtime-convergence.md`
+
 ## Platform Guidance
 
 - macOS: native SwiftUI shell calling the CLI bridge today, then migrate to shared core bindings later.
 - Windows: native Tauri shell with a Rust system-integration layer and a Node runtime bridge that reuses the current client behavior contract.
 - Linux: keep packaging and desktop integration isolated from Windows and macOS concerns.
 - Android: native mobile app with Compose UI, local persistence, gRPC transport, a foreground sync service, and a share target; keep mobile UX, permissions, and background execution separate from desktop assumptions.
+
+## Current Convergence Reality
+
+- `apps/client-cli` is the only client runtime that directly imports `@sharepaste/client-core`.
+- `apps/desktop-macos` and `apps/desktop-windows` currently reuse `@sharepaste/client` through process bridges.
+- `apps/mobile-android` currently keeps an independent Kotlin implementation of sync, crypto, transport, and session logic.
+- `crates/client-runtime` is the intended convergence target for platform-neutral client behavior, not a full replacement for per-platform adapters or UI.
 
 ## Workspace Guidance
 

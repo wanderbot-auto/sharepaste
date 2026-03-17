@@ -58,6 +58,13 @@ describe("client core", () => {
     expect(blocked).toBe(false);
   });
 
+  it("generates item ids with stable prefix format", () => {
+    const engine = new SyncEngine("dev-self");
+    const itemId = engine.makeItemId(new Uint8Array([1, 2, 3]), 1700000000);
+
+    expect(itemId).toMatch(/^item_[0-9a-f]{16}_[A-Za-z0-9_-]{6}$/);
+  });
+
   it("suppresses duplicate and loopback events", () => {
     const engine = new SyncEngine("dev-self");
 
@@ -75,12 +82,13 @@ describe("client core", () => {
 
     expect(engine.shouldApplyIncoming(incoming).accepted).toBe(true);
     expect(engine.shouldApplyIncoming(incoming).accepted).toBe(false);
+    expect(engine.shouldApplyIncoming(incoming).reason).toBe("duplicate_item");
     expect(
       engine.shouldApplyIncoming({
         ...incoming,
         itemId: "new",
         sourceDeviceId: "dev-self"
-      }).accepted
-    ).toBe(false);
+      }).reason
+    ).toBe("loopback");
   });
 });

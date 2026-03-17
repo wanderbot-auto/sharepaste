@@ -33,6 +33,22 @@ fn seals_and_unseals_group_key_for_target_device() {
 }
 
 #[test]
+fn seals_and_unseals_group_key_with_pem_keys() {
+    let crypto = CryptoRuntime::new();
+    let identity = crypto.create_identity_pem();
+    let key = crypto.generate_group_key();
+
+    let sealed = crypto
+        .seal_group_key_for_device_pem(&key, &identity.wrap_public_key)
+        .expect("sealing with pem should succeed");
+    let unsealed = crypto
+        .unseal_group_key_for_device_pem(&sealed, &identity.wrap_private_key)
+        .expect("unsealing with pem should succeed");
+
+    assert_eq!(unsealed, key);
+}
+
+#[test]
 fn converts_generated_identity_to_and_from_pem() {
     let crypto = CryptoRuntime::new();
     let identity = crypto.create_identity();
